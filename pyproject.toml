@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "terrain-path-planner"
+version = "0.1.0"
+description = "Traversable voxel graph search and corridor-constrained whole-path smoothing"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=2.0,<3", "scipy>=1.14,<2"]
+
+[project.optional-dependencies]
+web = ["fastapi>=0.115,<1", "uvicorn>=0.30,<1", "Pillow>=10,<13"]
+test = ["fastapi>=0.115,<1", "Pillow>=10,<13", "httpx>=0.28,<0.29"]
+
+[project.scripts]
+terrain-path-viewer = "terrain_planner.viewer:main"
+terrain-path-benchmark = "terrain_planner.benchmark:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

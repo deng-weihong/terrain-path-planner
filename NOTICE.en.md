@@ -1,0 +1,25 @@
+# Provenance and Dependencies
+
+[简体中文](NOTICE.md) | [English](NOTICE.en.md)
+
+The 3D graph search originated in an existing robot navigation project and is maintained independently here. This project uses local types and coordinate conversions and does not require the original workspace. Whole-path smoothing, examples, and visualization are maintained in this standalone project.
+
+A project license has not been selected. Each third-party dependency remains subject to its upstream license. Dependencies are installed through pip or npm; their source files have not been vendored into this project.
+
+| Dependency | Purpose | Upstream License |
+| --- | --- | --- |
+| NumPy | Arrays and numerical operations | BSD-3-Clause |
+| SciPy | Distance transforms, splines, sparse operations, and optimization | BSD-3-Clause |
+| Pillow | Optional PNG map previews | HPND |
+| FastAPI | Optional HTTP API | MIT |
+| Uvicorn | ASGI server | BSD-3-Clause |
+| HTTPX | API tests | BSD-3-Clause |
+| Vue | Viewer interface | MIT |
+| Three.js | 3D rendering and picking | MIT |
+| Lucide | Interface icons | ISC |
+| Vite / Vue plugin | Frontend build | MIT |
+| TypeScript | Type checking | Apache-2.0 |
+| vue-tsc | Vue type checking | MIT |
+| Playwright | Browser tests | Apache-2.0 |
+
+Use the license files of the actual resolved dependency versions when preparing a release. Recorded maps and routes remain in the local data directory and are excluded from the source archive.

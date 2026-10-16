@@ -1,0 +1,29 @@
+{
+  "name": "terrain-path-planner-viewer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5182 --strictPort",
+    "build": "vue-tsc --noEmit && vite build",
+    "start": "node scripts/python.mjs -m terrain_planner.viewer",
+    "test": "node scripts/python.mjs -m unittest discover -s tests -v",
+    "benchmark": "node scripts/python.mjs -m terrain_planner.benchmark",
+    "test:web": "node tests/web/run-check.mjs",
+    "package:source": "node scripts/python.mjs scripts/package-source.py"
+  },
+  "dependencies": {
+    "@lucide/vue": "1.23.0",
+    "three": "0.180.0",
+    "vue": "3.5.39"
+  },
+  "devDependencies": {
+    "@types/three": "0.180.0",
+    "@vitejs/plugin-vue": "6.0.7",
+    "playwright": "1.59.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.6",
+    "vue-tsc": "3.3.6"
+  },
+  "engines": { "node": ">=20.19.0" }
+}
