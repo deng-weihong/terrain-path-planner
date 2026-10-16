@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.18)
+project(terrain_planner_consumer LANGUAGES CXX)
+find_package(terrain_planner 0.1 CONFIG REQUIRED)
+add_executable(consumer ../plan_route.cpp)
+target_link_libraries(consumer PRIVATE terrain_planner::terrain_planner)
+add_executable(consumer-cli ../../src/main.cpp)
+target_link_libraries(consumer-cli PRIVATE terrain_planner::terrain_planner_json)

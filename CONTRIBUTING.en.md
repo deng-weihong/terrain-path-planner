@@ -17,4 +17,4 @@ Add a focused regression and run `npm run benchmark` when changing curves, const
 
 Keep dependencies, virtual environments, build output, logs, and maps without redistribution permission out of commits. Compare validation results together with route metrics; a shorter or smoother curve alone is insufficient.
 
-Update the data-format documentation when public fields or parameter meanings change. Chinese is the default documentation language. Maintain the English version, examples, and language links together with the Chinese version. The C++ port should reuse existing formats and validation cases, with explicit numerical tolerances.
+Update the data-format documentation when public fields or parameter meanings change. Chinese is the default documentation language. Maintain the English version, examples, and language links together with the Chinese version. Maintain shared formats, cross-language regressions, and numerical tolerances for C++ and Python. Native changes require `npm run build:cpp`, `npm run test:cpp`, and `npm run test:parity`.

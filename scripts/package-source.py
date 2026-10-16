@@ -12,12 +12,13 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = (
     "README.md", "README.en.md", "CONTRIBUTING.md", "CONTRIBUTING.en.md",
     "NOTICE.md", "NOTICE.en.md", "LICENSE",
-    ".gitignore", ".gitattributes", ".editorconfig",
+    ".gitignore", ".gitattributes", ".editorconfig", ".clang-format",
     "pyproject.toml", "package.json", "package-lock.json",
     "index.html", "tsconfig.json", "vite.config.ts", "data/README.md", "data/README.en.md",
 )
-DIRECTORIES = ("src", "web", "tests", "examples", "scripts", "docs", ".github")
-EXCLUDED = {"__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache"}
+DIRECTORIES = ("src", "cpp", "web", "tests", "examples", "scripts", "docs", ".github")
+EXCLUDED = {"__pycache__", "node_modules", ".venv", ".pytest_cache", ".ruff_cache",
+            "build", "dist", "CMakeFiles", "_deps", ".git"}
 
 
 def source_files():
@@ -28,7 +29,8 @@ def source_files():
             files.extend(directory.rglob("*"))
     for file in sorted(set(files)):
         relative = file.relative_to(ROOT)
-        if any(part in EXCLUDED or part.endswith(".egg-info") for part in relative.parts):
+        if any(part in EXCLUDED or part.endswith(".egg-info") or part.startswith("cmake-build-")
+               for part in relative.parts):
             continue
         if file.suffix in {".pyc", ".pyo", ".log", ".pid"}:
             continue

@@ -5,11 +5,13 @@ import { Activity, ArrowDownToLine, ArrowLeftRight, Check, ChevronDown, CircleAl
   ShieldCheck, Upload, X } from '@lucide/vue'
 import MapCanvas from './MapCanvas.vue'
 import CurvatureChart from './CurvatureChart.vue'
-import type { Dataset, Endpoint, Metrics, Options, PickMode, Point, Result, ViewMode } from './types'
+import type { Dataset, Endpoint, Engine, Metrics, Options, PickMode, Point, Result, ViewMode } from './types'
 
 const choices = ref<{ id: string; name: string }[]>([])
 const dataset = ref<Dataset | null>(null)
 const selectedDataset = ref('obstacles')
+const engines = ref<{ id: Engine; name: string; available: boolean }[]>([{ id: 'python', name: 'Python', available: true }])
+const engine = ref<Engine>('python')
 const options = reactive<Options>({ smoothness: 6, max_deviation: 0.8, clearance: 0.39, control_spacing: 1.5 })
 const result = ref<Result | null>(null)
 const history = ref<Result[]>([])
@@ -38,7 +40,10 @@ const settingsOpen = ref(false)
 let generation = 0
 let disposed = false
 let clock: ReturnType<typeof setInterval> | undefined
-const dirty = computed(() => result.value && JSON.stringify(options) !== JSON.stringify(result.value.options))
+const sameOptions = (a: Options, b: Options) =>
+  (['smoothness', 'max_deviation', 'clearance', 'control_spacing'] as const).every(key => a[key] === b[key])
+const dirty = computed(() => result.value && (!sameOptions(options, result.value.options)
+  || engine.value !== (result.value.engine ?? 'python')))
 const route = computed(() => manualSelection.value ? plannedRoute.value ?? [] : importedRoute.value ?? dataset.value?.route ?? [])
 const oldMetrics = computed(() => result.value?.baseline ?? (!manualSelection.value && !importedRoute.value ? dataset.value?.baseline : undefined))
 const controlsDisabled = computed(() => busy.value || loading.value || picking.value)
@@ -108,7 +113,7 @@ async function run(plan = false) {
   try {
     const job = await api<{ id: string }>('/api/optimize', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dataset: dataset.value.id, ...options,
+      body: JSON.stringify({ dataset: dataset.value.id, engine: engine.value, ...options,
         ...(plan ? { start: start.value!.point, goal: goal.value!.point }
           : manualSelection.value || importedRoute.value ? { route: route.value } : {}),
       }),
@@ -142,6 +147,7 @@ async function run(plan = false) {
 
 function restore(item: Result) {
   result.value = item
+  engine.value = item.engine ?? 'python'
   Object.assign(options, item.options)
   pickMode.value = 'pan'
   manualSelection.value = !!item.planning
@@ -240,7 +246,11 @@ function deltaText(field: keyof Metrics) {
 onMounted(async () => {
   window.addEventListener('keydown', keydown)
   try {
-    choices.value = await api('/api/datasets')
+    const [maps, available] = await Promise.all([
+      api<{ id: string; name: string }[]>('/api/datasets'),
+      api<{ id: Engine; name: string; available: boolean }[]>('/api/engines'),
+    ])
+    choices.value = maps; engines.value = available
     await loadDataset(selectedDataset.value)
   } catch (e) { loading.value = false; error.value = e instanceof Error ? e.message : '服务连接失败' }
 })
@@ -271,7 +281,8 @@ onBeforeUnmount(() => { disposed = true; clearInterval(clock); window.removeEven
       <aside class="sidebar" :class="{ 'mobile-open': settingsOpen }">
         <section class="parameter-section">
           <div class="section-heading"><h2><Settings2 :size="16" />优化参数</h2><button class="icon-button" title="恢复默认参数" aria-label="恢复默认参数" :disabled="busy" @click="Object.assign(options, presets[1].values)"><RotateCcw :size="14" /></button></div>
-          <div class="presets" aria-label="参数预设"><button v-for="preset in presets" :key="preset.label" :class="{ active: JSON.stringify(options) === JSON.stringify(preset.values) }" :disabled="busy" @click="Object.assign(options, preset.values)">{{ preset.label }}</button></div>
+          <div class="engine-select"><label for="engine">计算引擎</label><select id="engine" v-model="engine" aria-label="计算引擎" :disabled="controlsDisabled"><option v-for="item in engines" :key="item.id" :value="item.id" :disabled="!item.available">{{ item.name }}{{ item.available ? '' : ' · 未构建' }}</option></select></div>
+          <div class="presets" aria-label="参数预设"><button v-for="preset in presets" :key="preset.label" :class="{ active: sameOptions(options, preset.values) }" :disabled="busy" @click="Object.assign(options, preset.values)">{{ preset.label }}</button></div>
           <div class="parameter"><label for="smoothness">平滑强度</label><output>{{ options.smoothness.toFixed(1) }}</output><input id="smoothness" v-model.number="options.smoothness" :disabled="busy" type="range" min="0.1" max="60" step="0.1" /></div>
           <div class="parameter"><label for="deviation">最大偏离</label><div class="number-unit"><input id="deviation-number" v-model.number="options.max_deviation" aria-label="最大偏离数值" :disabled="busy" type="number" min="0.05" max="3" step="0.05" /><span>m</span></div><input id="deviation" v-model.number="options.max_deviation" :disabled="busy" type="range" min="0.05" max="3" step="0.05" /></div>
           <div class="parameter"><label for="clearance">目标边界距离</label><div class="number-unit"><input v-model.number="options.clearance" aria-label="目标边界距离数值" :disabled="busy" type="number" min="0" max="1" step="0.01" /><span>m</span></div><input id="clearance" v-model.number="options.clearance" :disabled="busy" type="range" min="0" max="1" step="0.01" /></div>
@@ -293,7 +304,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(clock); window.removeEven
 
         <section v-if="history.length" class="history-section">
           <div class="section-heading"><h2><History :size="16" />运行记录</h2><small>{{ history.length }} 次</small></div>
-          <button v-for="(item, index) in history" :key="item.jobId" class="history-item" :class="{ selected: result?.jobId === item.jobId }" :disabled="busy" @click="restore(item)"><span class="history-number">{{ String(history.length - index).padStart(2, '0') }}</span><span><strong>强度 {{ item.options.smoothness }} · 偏离 {{ item.options.max_deviation }} m</strong><small>曲率 RMS {{ item.optimized.curvatureRms.toFixed(3) }}</small></span><Check v-if="result?.jobId === item.jobId" :size="14" /></button>
+          <button v-for="(item, index) in history" :key="item.jobId" class="history-item" :class="{ selected: result?.jobId === item.jobId }" :disabled="busy" @click="restore(item)"><span class="history-number">{{ String(history.length - index).padStart(2, '0') }}</span><span><strong>强度 {{ item.options.smoothness }} · 偏离 {{ item.options.max_deviation }} m</strong><small>{{ item.engine === 'cpp' ? 'C++' : 'Python' }} · 曲率 RMS {{ item.optimized.curvatureRms.toFixed(3) }}</small></span><Check v-if="result?.jobId === item.jobId" :size="14" /></button>
         </section>
       </aside>
 

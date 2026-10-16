@@ -4,7 +4,7 @@
 
 三维图搜索源自既有机器人导航项目的路径规划实现，在此独立维护。本项目使用本地类型和坐标转换，不需要原工作区运行。全路径平滑、示例和可视化在独立目录中维护。
 
-当前未选定本项目的许可证；第三方依赖各自遵守其上游许可证。依赖通过 pip/npm 安装，未将其源文件复制进本项目。
+本项目采用 [MIT 许可证](LICENSE)，版权所有者为 deng-weihong。第三方依赖各自遵守其上游许可证，通过 pip/npm、系统包或 CMake 获取；未将依赖源码复制进本项目。
 
 | 依赖 | 用途 | 上游许可证 |
 | --- | --- | --- |
@@ -21,5 +21,10 @@
 | TypeScript | 类型检查 | Apache-2.0 |
 | vue-tsc | Vue 类型检查 | MIT |
 | Playwright | 浏览器测试 | Apache-2.0 |
+| Eigen | C++ 稀疏线性代数与样条求解 | MPL-2.0 |
+| LBFGSpp v0.3.0 | C++ L-BFGS-B 有界优化 | MIT |
+| nlohmann/json | C++ JSON 输入输出 | MIT |
 
 发行时应以实际锁定版本的许可证文件为准。现场地图与路线保留在本地数据目录，未纳入源码归档。
+
+C++ 使用的上游版权和 MIT 授权条款保留在 [第三方声明](cpp/third_party/NOTICE.txt)，安装 C++ 库时一并安装。Eigen 源码与授权位于 <https://gitlab.com/libeigen/eigen>，Eigen 文件未在本项目中修改。

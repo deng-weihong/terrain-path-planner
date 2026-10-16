@@ -52,6 +52,8 @@ small { font-size: 11px; }
 .presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 3px; gap: 3px; background: #f0f4f5; border-radius: 5px; margin-bottom: 20px; }
 .presets button { border: none; background: transparent; color: #7a898c; border-radius: 3px; font-size: 11px; height: 27px; padding: 0; }
 .presets button.active { color: #087f73; background: #fff; box-shadow: 0 1px 3px #163d3010; font-weight: 600; }
+.engine-select { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; color: #637579; font-size: 12px; }
+.engine-select select { width: 118px; min-width: 0; height: 30px; border: 1px solid var(--border); border-radius: 4px; padding: 0 7px; background: white; color: #344c50; }
 .parameter { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px; margin-bottom: 18px; }
 .parameter label { font-size: 12px; color: #637579; }
 .parameter output { width: 54px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }

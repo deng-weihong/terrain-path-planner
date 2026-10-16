@@ -4,6 +4,8 @@
 
 This document describes `corridor-shortcut-bspline-v3`. The objective is to reduce repeated heading changes and unnecessary detours across an entire route while preserving endpoints, ground support, local terrain, and clearance constraints. The pipeline combines graph search with continuous curve optimization.
 
+Python and C++ share the data semantics and validation rules below. SciPy calls describe the Python numerical implementation; C++ uses Eigen, LBFGSpp, and native natural smoothing splines for the same stages. See [C++ Numerical Methods](cpp.md).
+
 ## 1. Maps and Coordinates
 
 The input consists of integer indices `(ix, iy, iz)` for traversable ground voxels, rather than occupancy points for all obstacles. For resolution `r`, a voxel center is:

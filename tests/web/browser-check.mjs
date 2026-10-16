@@ -191,6 +191,39 @@ async function focusedScreenshot(page, context, target, filename, zoom = 14) {
   await page.getByRole('button', { name: '完整地图', exact: true }).click()
 }
 
+async function nativeEngine(page, viewport) {
+  if (process.env.PATH_PLANNER_TEST_CPP !== '1') return
+  const select = page.getByLabel('计算引擎', { exact: true })
+  if (!await select.isVisible()) await page.getByRole('button', { name: '算法参数', exact: true }).click()
+  await select.selectOption('cpp')
+  await page.getByRole('button', { name: '运行优化', exact: true }).click()
+  await settled(page)
+  const result = await exportResult(page)
+  assert.equal(result.engine, 'cpp', 'native selection did not execute C++')
+  assert.equal(result.validation.newViolationCount, 0)
+  assert.equal(result.solver.continuity, 'C2')
+  assert.equal(await page.locator('.pending-dot, .stale-tag').count(), 0, 'completed C++ result was incorrectly marked stale')
+  await layout(page, `${viewport}-cpp`)
+  if (viewport === 'desktop') {
+    await page.getByRole('button', { name: '规划路线', exact: true }).click()
+    await settled(page)
+    const planned = await exportResult(page)
+    assert.equal(planned.engine, 'cpp')
+    assert.equal(planned.planning.engine, 'traversable-graph-cpp-v1', 'graph search did not execute in C++')
+    assert.equal(planned.validation.newViolationCount, 0)
+    await writeFile(new URL('cpp-manual-result.json', artifactDir), JSON.stringify(planned, null, 2))
+    await select.selectOption('python')
+    await page.getByRole('button', { name: '运行优化', exact: true }).click()
+    await settled(page)
+    assert.equal((await exportResult(page)).engine, 'python')
+    await page.locator('.history-item').nth(1).click()
+    assert.equal(await select.inputValue(), 'cpp', 'history restored the wrong engine')
+    assert.equal((await exportResult(page)).engine, 'cpp')
+    assert.equal(await page.locator('.pending-dot, .stale-tag').count(), 0, 'restored C++ history was incorrectly marked stale')
+  }
+  checks.push({ name: `${viewport}-cpp-engine`, result: 'native optimization, export, and WebGL passed' })
+}
+
 async function threeDimensionalViews(page, context, viewport) {
   const dataset = await (await context.request.get(`${baseUrl}/api/datasets/${initialDataset}`)).json()
   const initial = await pixels(page)
@@ -365,6 +398,7 @@ try {
       await settled(page)
       await layout(page, 'mobile-parameters')
     }
+    await nativeEngine(page, viewport.name)
     assert.deepEqual(errors, [], `${viewport.name}: browser errors`)
     await context.close()
   }

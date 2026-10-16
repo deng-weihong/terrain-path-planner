@@ -59,6 +59,7 @@ HTTP 输入限制为 2–20,000 点、XY 长度 0.1–1,000 m，所有坐标有�
 | 方法与路径 | 用途 |
 | --- | --- |
 | `GET /api/health` | 健康状态与项目标识 |
+| `GET /api/engines` | Python / C++ 引擎及可用状态 |
 | `GET /api/datasets` | 可用场景列表 |
 | `GET /api/datasets/{id}` | 地图分辨率、范围、体素数、样本路线与指标 |
 | `GET /api/datasets/{id}/voxels.bin` | 全量 XYZ int32 二进制 |
@@ -81,6 +82,7 @@ HTTP 输入限制为 2–20,000 点、XY 长度 0.1–1,000 m，所有坐标有�
 ```json
 {
   "dataset": "zigzag",
+  "engine": "cpp",
   "start": [2.05, 3.05, 0.05],
   "goal": [20.05, 9.05, 0.05],
   "smoothness": 6,
@@ -92,6 +94,8 @@ HTTP 输入限制为 2–20,000 点、XY 长度 0.1–1,000 m，所有坐标有�
 
 不提供 `start`、`goal` 时，使用 `route` 或场景样本路线。端点必须成对，且不能同时提供 `route`。成功创建返回 202 和任务 `id`；同一时间已有任务运行返回 409；无效参数返回 422，未知数据集返回 404。
 
+`engine` 默认 `python`，也可指定 `cpp`。原生程序未构建或不可执行时返回 503，不自动降级。独立 C++ CLI 使用 `voxels`、`resolution`、`route` 或端点及嵌套 `options`，格式见 [C++ JSON 协议](cpp.md)。
+
 轮询状态为 `running`、`completed` 或 `failed`。运行阶段为 `planning` 或 `optimizing`。任务失败后释放执行槽，可继续提交下一次计算。
 
 ## 结果字段
@@ -99,6 +103,7 @@ HTTP 输入限制为 2–20,000 点、XY 长度 0.1–1,000 m，所有坐标有�
 | 字段 | 内容 |
 | --- | --- |
 | `algorithm` | 优化算法版本 |
+| `engine` | 实际执行的 `python` 或 `cpp`；由接口或原生 JSON 适配器补充 |
 | `options` | 本次实际参数 |
 | `dataset` / `mapSha256` / `jobId` | 接口任务来源 |
 | `sourceRoute` | 搜索得到或导入的原始 XYZ 顶点 |

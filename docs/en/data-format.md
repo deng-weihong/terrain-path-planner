@@ -59,6 +59,7 @@ Interactive API documentation: <http://localhost:5181/api/docs>. The API is part
 | Method and Path | Purpose |
 | --- | --- |
 | `GET /api/health` | Health and project identifier |
+| `GET /api/engines` | Python and C++ engines with availability |
 | `GET /api/datasets` | Available scenes |
 | `GET /api/datasets/{id}` | Resolution, bounds, voxel count, sample route, and metrics |
 | `GET /api/datasets/{id}/voxels.bin` | Complete XYZ int32 binary |
@@ -81,6 +82,7 @@ Endpoint planning request:
 ```json
 {
   "dataset": "zigzag",
+  "engine": "cpp",
   "start": [2.05, 3.05, 0.05],
   "goal": [20.05, 9.05, 0.05],
   "smoothness": 6,
@@ -92,6 +94,8 @@ Endpoint planning request:
 
 Without `start` and `goal`, the request uses `route` or the scene's sample route. Endpoints must be supplied together and cannot be combined with `route`. Job creation returns 202 and an `id`; an already running calculation returns 409, invalid parameters return 422, and an unknown dataset returns 404.
 
+`engine` defaults to `python` and also accepts `cpp`. A missing or nonexecutable native binary returns 503 without a fallback. The standalone C++ CLI accepts `voxels`, `resolution`, a `route` or endpoints, and nested `options`; see the [C++ JSON protocol](cpp.md).
+
 Polled statuses are `running`, `completed`, or `failed`; execution phases are `planning` or `optimizing`. A failed job releases the worker so another calculation can be submitted.
 
 ## Result Fields
@@ -99,6 +103,7 @@ Polled statuses are `running`, `completed`, or `failed`; execution phases are `p
 | Field | Contents |
 | --- | --- |
 | `algorithm` | Optimization algorithm version |
+| `engine` | Actual `python` or `cpp` execution, added by the API or native JSON adapter |
 | `options` | Actual parameters used |
 | `dataset` / `mapSha256` / `jobId` | API job provenance |
 | `sourceRoute` | Original XYZ vertices from search or import |

@@ -17,6 +17,8 @@ Vite 开发地址为 5182，API 默认代理到 5181。更改 API 开发端口�
 
 ## Python 测试
 
+先按 [C++ 构建说明](cpp.md) 安装数值依赖，再执行 `npm run build:cpp` 和 `npm run test:cpp`。Python 测试会自动检测 C++ 并运行交叉回归；缺少原生可执行文件时明确跳过。CI 设置 `PATH_PLANNER_REQUIRE_CPP=1`，缺少 C++ 会失败。
+
 ```bash
 npm test
 ```
@@ -53,6 +55,8 @@ npm run build
 npx playwright install chromium
 npm run test:web
 ```
+
+构建 C++ 后，使用 `PATH_PLANNER_TEST_CPP=1 npm run test:web` 额外验证桌面、笔记本和手机的 C++ 引擎切换、计算、导出、历史恢复与 WebGL 像素。CI 默认启用该检查。
 
 检查脚本默认自动启动临时本地 API，并在完成后关闭。用已有地址：
 

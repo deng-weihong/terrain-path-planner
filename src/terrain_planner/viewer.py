@@ -5,7 +5,9 @@ import json
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import asdict
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 import numpy as np
@@ -15,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
 
 from .datasets import load_datasets
+from .native import native_binary, run_native
 from .optimizer import Options, optimize
 from .planner import pick_point, plan_reference
 
@@ -31,6 +34,7 @@ lock = threading.Lock()
 
 class OptimizeRequest(BaseModel):
     dataset: str = Field(default="obstacles", min_length=1, max_length=64)
+    engine: Literal["python", "cpp"] = "python"
     smoothness: float = Field(default=6, ge=0.1, le=60)
     max_deviation: float = Field(default=0.8, ge=0.05, le=3)
     clearance: float = Field(default=0.39, ge=0, le=1)
@@ -62,6 +66,12 @@ def health():
 @app.get("/api/datasets")
 def list_datasets():
     return [{"id": value.id, "name": value.name} for value in datasets.values()]
+
+
+@app.get("/api/engines")
+def list_engines():
+    return [{"id": "python", "name": "Python", "available": True},
+            {"id": "cpp", "name": "C++", "available": native_binary() is not None}]
 
 
 @app.get("/api/datasets/{dataset_id}")
@@ -100,10 +110,19 @@ def get_voxels(dataset_id: str):
 def run_job(job_id: str, request: OptimizeRequest):
     try:
         dataset = datasets[request.dataset]
-        options = Options(**request.model_dump(exclude={"dataset", "route", "start", "goal"}))
+        options = Options(**request.model_dump(exclude={"dataset", "engine", "route", "start", "goal"}))
+        native_input = {"resolution": dataset.grid.resolution, "voxels": dataset.grid.keys.tolist(),
+                        "options": asdict(options)} if request.engine == "cpp" else None
         planning = None
         if request.start is not None and request.goal is not None:
-            reference, planning = plan_reference(dataset, request.start, request.goal, options.clearance)
+            if native_input is not None:
+                searched = run_native({**native_input, "operation": "search",
+                                       "start": request.start, "goal": request.goal})
+                if not searched["success"]:
+                    raise ValueError(f'C++ search failed: {searched["status"]}')
+                reference, planning = np.asarray(searched["path"]), searched["planning"]
+            else:
+                reference, planning = plan_reference(dataset, request.start, request.goal, options.clearance)
         else:
             reference = np.asarray(request.route) if request.route is not None else dataset.route
         with lock:
@@ -117,9 +136,10 @@ def run_job(job_id: str, request: OptimizeRequest):
                               for key in np.floor(reference[:, :2] / dataset.grid.resolution).astype(int)])
         if not supported.all():
             raise ValueError(f"Imported reference has {int((~supported).sum())} points outside this map")
-        result = optimize(dataset.grid, reference, options)
+        result = (run_native({**native_input, "route": reference.tolist()}) if native_input is not None
+                  else optimize(dataset.grid, reference, options))
         result.update({"dataset": dataset.id, "mapSha256": dataset.digest, "jobId": job_id,
-                       "sourceRoute": reference.tolist(), "planning": planning})
+                       "engine": request.engine, "sourceRoute": reference.tolist(), "planning": planning})
         with lock:
             jobs[job_id].update(status="completed", result=result)
     except Exception as error:
@@ -131,6 +151,8 @@ def run_job(job_id: str, request: OptimizeRequest):
 def create_job(request: OptimizeRequest):
     if request.dataset not in datasets:
         raise HTTPException(404, "Dataset not found")
+    if request.engine == "cpp" and native_binary() is None:
+        raise HTTPException(503, "C++ executable is unavailable; build cpp/ or set PATH_PLANNER_CPP")
     with lock:
         if any(job["status"] == "running" for job in jobs.values()):
             raise HTTPException(409, "An optimization is already running")

@@ -2,11 +2,11 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-Path search on traversable voxel graphs and whole-path smoothing, with a standalone Python package and an interactive Three.js viewer.
+Path search on traversable voxel graphs and whole-path smoothing, with standalone Python and C++ libraries and an interactive Three.js viewer. Licensed under MIT.
 
 The planner searches a graph that preserves terrain elevation, removes unnecessary detours within the original route corridor, and jointly optimizes the entire curve. The viewer supports manual start and goal selection, elevation layers, parameter adjustment, curvature and clearance comparisons, and result export. It runs independently of robots, ROS, and external application servers.
 
-The current implementation is Python. The C++ version is planned and has not been implemented yet; see [Architecture](docs/en/architecture.md) for its scope and shared data contracts.
+Both Python and C++ implement XYZ graph search, corridor constraints, visibility shortcuts, whole-path B-spline optimization, continuous spline refinement, and geometry validation. C++ provides a CMake library and a JSON CLI that run independently of Python and the Web interface. See [C++ Usage and Design](docs/en/cpp.md).
 
 ![3D map, route comparison, and validation results](docs/images/desktop.png)
 
@@ -35,6 +35,21 @@ To use the algorithm without the viewer:
 
 For frontend development, run `npm start` and `npm run dev` in separate terminals, then open <http://localhost:5182>. The npm commands prefer the project `.venv`; set `PATH_PLANNER_PYTHON` to choose another interpreter.
 
+## C++ Quick Start
+
+Requires C++17, CMake 3.18+, Eigen 3.3+, and nlohmann/json. The L-BFGS-B solver is provided by a pinned LBFGSpp version. On Ubuntu / Debian:
+
+```bash
+sudo apt-get install -y build-essential cmake libeigen3-dev nlohmann-json3-dev
+cmake -S cpp -B build/cpp -DCMAKE_BUILD_TYPE=Release
+cmake --build build/cpp --parallel 2
+ctest --test-dir build/cpp --output-on-failure
+./build/cpp/terrain-plan-example
+./build/cpp/terrain-plan --input examples/native-request.json --output result.json
+```
+
+The first configuration downloads LBFGSpp v0.3.0 with SHA-256 verification; local headers can be supplied for offline builds. After building, select C++ in the viewer's engine menu. The library and CLI need no Python, Node.js, or HTTP service.
+
 ## Pipeline
 
 ```text
@@ -55,6 +70,7 @@ Graph search and final curve validation cover different constraints. Search pres
 
 ```bash
 npm test
+npm run test:cpp
 npm run benchmark
 npm run build
 npx playwright install chromium
@@ -67,6 +83,7 @@ Browser checks start a temporary local API and verify WebGL pixels, 3D interacti
 
 ```text
 src/terrain_planner/  Python algorithms, models, and optional viewer API
+cpp/                  Native C++17 library, JSON CLI, examples, and CTest
 web/                  Vue + Three.js viewer
 tests/                Algorithm, API, and browser checks
 examples/             Minimal runnable examples
@@ -78,10 +95,11 @@ data/                 Data conventions; local maps belong in local/
 ## Documentation
 
 - [Algorithm Design](docs/en/algorithm.md): graph search, corridor constraints, spline objectives, terrain, and validation.
-- [Architecture](docs/en/architecture.md): module boundaries, execution paths, and the planned C++ port.
+- [Architecture](docs/en/architecture.md): module boundaries, execution paths, and both implementations.
+- [C++ Usage and Design](docs/en/cpp.md): standalone builds, library API, JSON protocol, numerical methods, and cross-language checks.
 - [Data Formats and API](docs/en/data-format.md): maps, routes, parameters, jobs, and exports.
 - [Development and Validation](docs/en/development.md): setup, tests, benchmarks, and 3D rendering.
 - [Source Snapshots and Releases](docs/en/releasing.md): archive contents, licensing status, and release steps.
 - [Contributing](CONTRIBUTING.en.md) and [Provenance and Dependencies](NOTICE.en.md).
 
-A project license has not been selected. No formally licensed release has been published yet.
+The project is licensed under [MIT](LICENSE). Dependencies retain their own licenses; see [dependency notices](NOTICE.en.md).

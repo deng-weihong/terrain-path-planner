@@ -1,4 +1,5 @@
 export type Point = [number, number, number]
+export type Engine = 'python' | 'cpp'
 export type ViewMode = 'compare' | 'baseline' | 'optimized'
 export type PickMode = 'orbit' | 'pan' | 'start' | 'goal'
 
@@ -66,6 +67,7 @@ export interface Validation {
 }
 
 export interface Result {
+  engine?: Engine
   jobId: string
   dataset: string
   mapSha256: string

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from terrain_planner import viewer as server
 from terrain_planner.datasets import Dataset
 from terrain_planner.optimizer import GridMap
+from terrain_planner.native import native_binary
 
 
 class PlanningApiTests(unittest.TestCase):
@@ -47,6 +48,27 @@ class PlanningApiTests(unittest.TestCase):
         self.assertEqual(self.client.post("/api/optimize", json={"route": [[0, 0, 0]]}).status_code, 422)
         self.assertEqual(self.client.get("/api/datasets/missing").status_code, 404)
         self.assertEqual(self.client.get("/api/jobs/missing").status_code, 404)
+
+    def test_engine_availability_and_missing_native_binary(self):
+        engines = self.client.get("/api/engines").json()
+        self.assertTrue(next(item for item in engines if item["id"] == "python")["available"])
+        self.assertEqual(self.client.post("/api/optimize", json={"engine": "unknown"}).status_code, 422)
+        with patch.object(server, "native_binary", return_value=None):
+            self.assertEqual(self.client.post("/api/optimize", json={"engine": "cpp"}).status_code, 503)
+
+    @unittest.skipUnless(native_binary() is not None, "C++ executable is not built")
+    def test_native_endpoint_planning_and_export_use_cpp(self):
+        start = self.client.post("/api/datasets/zigzag/pick", json={"x": 2, "y": 3}).json()["point"]
+        goal = self.client.post("/api/datasets/zigzag/pick", json={"x": 10, "y": 8}).json()["point"]
+        response = self.client.post("/api/optimize", json={"dataset": "zigzag", "engine": "cpp", "start": start, "goal": goal})
+        self.assertEqual(response.status_code, 202)
+        job = self.wait_job(response.json()["id"])
+        self.assertEqual(job["status"], "completed", job)
+        result = self.client.get(f'/api/jobs/{job["id"]}/export').json()
+        self.assertEqual(result["engine"], "cpp")
+        self.assertEqual(result["planning"]["engine"], "traversable-graph-cpp-v1")
+        self.assertTrue(result["validation"]["valid"], result["validation"])
+        np.testing.assert_allclose(np.asarray(result["path"])[[0, -1]], [start, goal], atol=1e-9, rtol=0)
 
     def test_import_failure_finishes_and_does_not_block_next_job(self):
         response = self.client.post("/api/optimize", json={

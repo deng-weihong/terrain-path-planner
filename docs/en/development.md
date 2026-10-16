@@ -17,6 +17,8 @@ Vite serves development pages on port 5182 and proxies API calls to port 5181. U
 
 ## Python Tests
 
+Install native dependencies following the [C++ build guide](cpp.md), then run `npm run build:cpp` and `npm run test:cpp`. Python tests detect C++ and run cross-language regressions when available, or explicitly skip them when the executable is absent. CI sets `PATH_PLANNER_REQUIRE_CPP=1` so a missing C++ build fails.
+
 ```bash
 npm test
 ```
@@ -53,6 +55,8 @@ npm run build
 npx playwright install chromium
 npm run test:web
 ```
+
+After building C++, use `PATH_PLANNER_TEST_CPP=1 npm run test:web` to additionally check engine selection, computation, export, history restoration, and WebGL pixels on desktop, laptop, and mobile. CI enables this check.
 
 The checker starts a temporary local API by default and closes it afterward. To use an existing server:
 
