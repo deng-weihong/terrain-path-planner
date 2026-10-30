@@ -123,7 +123,17 @@ lambda = 0.12 * sqrt(smoothness / 6)
 
 Fixed terrain, failed positions, and clearance corrections enter the same solve through higher fitting weights. Refinement and validation repeat without hiding discontinuities by splicing in the original polyline.
 
-The XY spline is C2 continuous. Z is matched to ground layers, so C2 continuity is not promised across steps. C2 continuity alone does not ensure small curvature: near-zero tangent speed or conflicting constraints can still cause large local turns. Minimum tangent speed and dense heading changes are therefore checked separately.
+The XY spline is C2 continuous; the ground route `path` retains ground-matched elevations for support, floor and step checks. C2 alone does not ensure low curvature, so minimum tangent speed and dense heading changes are checked separately.
+
+### Elevated navigation reference
+
+After ground validation, `navigationPath` is generated independently of the ground Z tolerance. It shares XY and sample correspondence with `path`. `navigation_height` defaults to 0.35 m and `elevation_radius` to 1.5 m. Ground heights are resampled at planar arc-length spacing no greater than 0.025 m, averaged with the compact kernel `(1 - (d/r)^2)^3`, and raised by the requested height. Single-cell bumps are filtered while sustained slopes are followed.
+
+Navigation endpoints equal ground endpoints plus the requested height, with quintic tapers nearby. Heights relative to the ground route must remain between `max(0.05, navigation_height - 0.15)` and `navigation_height + 0.15` meters. Violating positions revert to the unsmoothed raised route with gradual restoration around them. If six passes cannot satisfy the envelope, the whole raised route is retained. Large steps or conflicting constraints may therefore keep vertical bends.
+
+`validation` and `baselineValidation` always check ground routes. Raising the reference does not change traversability or remove gaps and floor problems. `navigation.validation` records ground validity and the height envelope separately; both are required for `valid`. `path` retains ground semantics for existing callers; the main displayed reference uses `navigationPath`, which is also exported. Map geometry and ground picking remain unchanged.
+
+The elevated line is a navigation reference, not a robot body or foot trajectory. Traversable ground alone cannot verify overhead clearance or body collision, and a raised line does not establish unsupported traversability.
 
 ## 9. Validation and Failure Classification
 

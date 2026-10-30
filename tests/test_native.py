@@ -101,10 +101,36 @@ class NativePlannerTests(unittest.TestCase):
         self.assertLess(np.abs(path[:, 2] - .05).max(), 1e-8)
         self.assertGreaterEqual(path[(path[:, 0] >= 6.5) & (path[:, 0] < 9.1), 1].min(), 6.5)
 
+    def test_one_cell_elevation_rounds_pitch_in_both_engines(self):
+        x, y = np.meshgrid(np.arange(110), np.arange(80))
+        raised = (x.ravel() >= 42) & (x.ravel() < 62)
+        grid = GridMap(np.column_stack([x.ravel(), y.ravel(), raised.astype(int)]))
+        route = np.array([[1.05, 4.05, .05], [4.05, 4.05, .05], [4.35, 4.05, .15],
+                          [6.05, 4.05, .15], [6.35, 4.05, .05], [9.05, 4.05, .05]])
+        python = optimize(grid, route)
+        native = self.native_optimize(grid, route)
+        for result in (python, native):
+            path = np.asarray(result["navigationPath"])
+            sampled, _ = resample(path, .05)
+            delta = np.diff(sampled, axis=0)
+            pitch = np.arctan2(delta[:, 2], np.linalg.norm(delta[:, :2], axis=1))
+            self.assertLess(np.rad2deg(np.abs(np.diff(pitch))).max(), 2)
+            self.assertTrue(result["validation"]["valid"], result["validation"])
+            self.assertGreater(result["navigation"]["smoothedSamples"], 0)
+            self.assertLessEqual(result["navigation"]["maxSmoothingAdjustmentM"], .150001)
+            np.testing.assert_array_equal(np.asarray(result["path"])[[0, -1]], route[[0, -1]])
+            np.testing.assert_allclose(path[[0, -1], 2], route[[0, -1], 2] + .35)
+            self.assertGreater(path[:, 2].max(), .4)
+            self.assertLessEqual(path[:, 2].max(), .5 + 1e-8)
+        np.testing.assert_allclose(np.asarray(native["navigationPath"])[:, 2],
+                                   np.asarray(python["navigationPath"])[:, 2], atol=1e-7, rtol=0)
+
     def test_invalid_baseline_and_malformed_requests_are_not_hidden(self):
         result = self.native_optimize(GridMap(np.array([[0, 0, 0], [2, 0, 0], [3, 0, 0]])),
                                       [[.05, .05, .05], [.35, .05, .05]])
         self.assertFalse(result["validation"]["valid"])
+        self.assertFalse(result["navigation"]["validation"]["valid"])
+        self.assertFalse(result["navigation"]["validation"]["groundValid"])
         self.assertGreater(result["validation"]["outsideCount"], 0)
         for request in ({}, {"resolution": .1, "voxels": [[0.5, 0, 0]]},
                         {"resolution": .1, "voxels": [[2147483648, 0, 0]]}):

@@ -53,7 +53,9 @@ if (search.success) {
 
 `SearchOptions` 定义坡度、台阶、边距、分量大小、展开上限与时间上限。端点按精确体素中心检查，容差为 1e-6 m。`plan_path()` 包含预处理与搜索，合计计时；`GraphPlanner::plan()` 只计本次查询，可进一步传入更小的时间预算。返回 `success`、`status`、原始图路线、代价和耗时。默认展开上限 250,000，时间预算 60 s。
 
-`Options` 与 Python 的四个参数相同。`OptimizationResult` 提供曲线、原路线、校验、曲率与边距指标、求解状态及保护路段。异常输入抛出标准 C++ 异常；几何检查未通过时仍返回结果和失败计数。
+`Options` 与 Python 的六个参数相同。`OptimizationResult` 提供曲线、原路线、校验、曲率与边距指标、求解状态及保护路段。异常输入抛出标准 C++ 异常；几何检查未通过时仍返回结果和失败计数。
+
+`result.path` 保留地面支撑路线；`result.navigation_path` 是共享 XY 的上方平滑参考线，默认离地 0.35 m、平滑半径 1.5 m。通过 `Options.navigation_height` 和 `Options.elevation_radius` 调整；参考高度统计与独立校验位于 `result.navigation`。JSON 中对应 `navigationPath` 和 `navigation`，详见 [数据格式](data-format.md)。
 
 ## JSON 命令行
 
@@ -69,7 +71,7 @@ if (search.success) {
 | --- | --- |
 | `route` | 要平滑的米制 XYZ 路线；与端点互斥 |
 | `start` / `goal` | 同时提供，先执行原生 XYZ 图搜索 |
-| `options` | `smoothness`、`max_deviation`、`clearance`、`control_spacing` |
+| `options` | `smoothness`、`max_deviation`、`clearance`、`control_spacing`、`navigation_height`、`elevation_radius` |
 | `operation` | 默认 `optimize`；`search` 仅返回图搜索结果 |
 | `search` | 可覆盖 `max_iterations` 和 `maximum_planning_time_ms` |
 | `dataset` / `mapSha256` / `jobId` | 可选来源字段，原样写入优化结果 |

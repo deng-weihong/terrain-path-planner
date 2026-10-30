@@ -17,6 +17,8 @@ class Options:
     max_deviation: float = 0.8
     clearance: float = 0.39
     control_spacing: float = 1.5
+    navigation_height: float = .35
+    elevation_radius: float = 1.5
 
 
 def arc_length(points: np.ndarray) -> np.ndarray:
@@ -376,13 +378,65 @@ def continuous_refinement(grid: GridMap, candidate: np.ndarray, source_s: np.nda
     }
 
 
+def navigation_reference(ground: np.ndarray, options: Options, ground_valid: bool) -> tuple[np.ndarray, dict]:
+    """Build an elevated reference; only the ground route is used for traversability."""
+    sampled, query = resample(ground, .025)
+    radius = options.elevation_radius
+    half = int(np.ceil(radius / (query[1] - query[0])))
+    offsets = np.arange(-half, half + 1) * (query[1] - query[0])
+    kernel = np.maximum(0, 1 - (offsets / radius) ** 2) ** 3
+    kernel /= kernel.sum()
+    filtered = np.convolve(np.pad(sampled[:, 2], half, mode="edge"), kernel, mode="valid")
+    distance = arc_length(ground)
+    target = np.interp(distance, query, filtered) + options.navigation_height
+    lifted = ground[:, 2] + options.navigation_height
+    minimum = max(.05, options.navigation_height - .15)
+    maximum = options.navigation_height + .15
+    fixed = np.zeros(len(ground), dtype=bool)
+    fixed[[0, -1]] = True
+    output = ground.copy()
+    for _ in range(6):
+        nearest, _ = cKDTree(distance[fixed, None]).query(distance[:, None])
+        t = np.clip(nearest / radius, 0, 1)
+        blend = t ** 3 * (10 - 15 * t + 6 * t * t)
+        output[:, 2] = lifted + blend * (target - lifted)
+        output[fixed, 2] = lifted[fixed]
+        height = output[:, 2] - ground[:, 2]
+        failures = (height < minimum - 1e-8) | (height > maximum + 1e-8)
+        if not failures.any():
+            break
+        fixed[failures] = True
+    else:
+        output[:, 2] = lifted
+    height = output[:, 2] - ground[:, 2]
+    adjusted = np.abs(output[:, 2] - lifted)
+    dense, _ = resample(output, .05)
+    delta = np.diff(dense, axis=0)
+    pitch = np.arctan2(delta[:, 2], np.linalg.norm(delta[:, :2], axis=1))
+    envelope_valid = bool(np.isfinite(output).all() and (height >= minimum - 1e-8).all()
+                          and (height <= maximum + 1e-8).all())
+    return output, {
+        "algorithm": "elevated-reference-v1", "heightM": options.navigation_height,
+        "smoothingRadiusM": radius, "minimumAllowedHeightM": minimum,
+        "maximumAllowedHeightM": maximum, "minGroundOffsetM": float(height.min()),
+        "maxGroundOffsetM": float(height.max()), "smoothedSamples": int((adjusted > 1e-6).sum()),
+        "maxSmoothingAdjustmentM": float(adjusted.max()),
+        "maxPitchChangeDeg": float(np.rad2deg(np.abs(np.diff(pitch))).max()) if len(pitch) > 1 else 0.,
+        "length3dM": float(np.linalg.norm(np.diff(output, axis=0), axis=1).sum()),
+        "validation": {"valid": bool(ground_valid and envelope_valid),
+                       "groundValid": bool(ground_valid), "heightEnvelopeValid": envelope_valid,
+                       "ceilingClearanceVerified": False, "robotEnvelopeVerified": False},
+    }
+
+
 def optimize(grid: GridMap, reference: np.ndarray, options: Options = Options()) -> dict:
     started = perf_counter()
     reference = np.asarray(reference, dtype=float)
     if reference.ndim != 2 or reference.shape[1] != 3 or not np.isfinite(reference).all():
         raise ValueError("Route must be a finite Nx3 array")
     if not (0.1 <= options.smoothness <= 60 and 0.05 <= options.max_deviation <= 3
-            and 0 <= options.clearance <= 1 and 0.4 <= options.control_spacing <= 4):
+            and 0 <= options.clearance <= 1 and 0.4 <= options.control_spacing <= 4
+            and .1 <= options.navigation_height <= 1.5 and .3 <= options.elevation_radius <= 3):
         raise ValueError("Optimization parameters are outside the supported limits")
     _, uniform_s = resample(reference, 0.025)
     s = np.unique(np.r_[uniform_s, arc_length(reference)])
@@ -504,8 +558,9 @@ def optimize(grid: GridMap, reference: np.ndarray, options: Options = Options())
     candidate, ref, refinement = continuous_refinement(grid, candidate, s, reference, options, terrain, clearance)
     s = refinement["referenceS"]
     raw_xy = BSpline(knots, controls, 3)(s)
-    checked = refinement["validation"]
     base_check = refinement["baselineValidation"]
+    checked = refinement["validation"]
+    navigation_path, navigation = navigation_reference(candidate, options, checked["valid"])
     old_metrics = metrics(grid, reference, options.clearance)
     new_metrics = metrics(grid, candidate, options.clearance)
     retained = np.linalg.norm(candidate[:, :2] - ref[:, :2], axis=1) < 0.001
@@ -517,7 +572,11 @@ def optimize(grid: GridMap, reference: np.ndarray, options: Options = Options())
         "optimized": new_metrics,
         "validation": checked,
         "baselineValidation": base_check,
+        "resultSchemaVersion": 2,
+        "pathRole": "ground-support",
         "path": candidate.tolist(),
+        "navigationPath": navigation_path.tolist(),
+        "navigation": navigation,
         "reference": ref.tolist(),
         "rawCandidate": np.column_stack([raw_xy, ref[:, 2]]).tolist(),
         "shortcut": shortcut,
@@ -535,6 +594,10 @@ def optimize(grid: GridMap, reference: np.ndarray, options: Options = Options())
         },
         "scope": {
             "checks": ["XY occupancy", "diagonal support", "local terrain layer", "preserved steps", "deviation", "boundary floor", "endpoints"],
+            "validationPath": "path",
+            "navigationPathRole": "elevated-reference",
+            "ceilingClearanceVerified": False,
+            "robotEnvelopeVerified": False,
             "production3dGraphVerified": False,
             "robotExecutionVerified": False,
         },

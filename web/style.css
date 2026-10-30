@@ -256,3 +256,5 @@ small { font-size: 11px; }
   .route-filename { max-width: 100px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } .spin { animation-duration: 2s; } }
+
+.line-swatch.ground { border-color: #667b87; }

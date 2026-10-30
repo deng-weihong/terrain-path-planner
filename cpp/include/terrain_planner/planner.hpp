@@ -20,6 +20,8 @@ struct Options {
     double max_deviation = 0.8;
     double clearance = 0.39;
     double control_spacing = 1.5;
+    double navigation_height = .35;
+    double elevation_radius = 1.5;
 };
 
 struct FieldSample {
@@ -117,9 +119,20 @@ struct SolverInfo {
     int constraint_samples = 0, height_rematched_samples = 0;
 };
 
+struct NavigationInfo {
+    double height_m = 0, smoothing_radius_m = 0;
+    double minimum_allowed_height_m = 0, maximum_allowed_height_m = 0;
+    double min_ground_offset_m = 0, max_ground_offset_m = 0;
+    double max_smoothing_adjustment_m = 0, max_pitch_change_deg = 0, length3d_m = 0;
+    int smoothed_samples = 0;
+    bool valid = false, ground_valid = false, height_envelope_valid = false;
+};
+
 struct OptimizationResult {
     Options options;
     Path path, reference, raw_candidate, source_route, shortcut_path;
+    Path navigation_path;
+    NavigationInfo navigation;
     Metrics baseline, optimized;
     Validation validation, baseline_validation;
     SolverInfo solver;

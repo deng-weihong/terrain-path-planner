@@ -39,6 +39,8 @@ class OptimizeRequest(BaseModel):
     max_deviation: float = Field(default=0.8, ge=0.05, le=3)
     clearance: float = Field(default=0.39, ge=0, le=1)
     control_spacing: float = Field(default=1.5, ge=0.4, le=4)
+    navigation_height: float = Field(default=.35, ge=.1, le=1.5)
+    elevation_radius: float = Field(default=1.5, ge=.3, le=3)
     route: list[tuple[float, float, float]] | None = Field(default=None, min_length=2, max_length=20000)
     start: tuple[float, float, float] | None = None
     goal: tuple[float, float, float] | None = None

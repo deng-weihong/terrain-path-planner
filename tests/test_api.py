@@ -18,7 +18,8 @@ class PlanningApiTests(unittest.TestCase):
             server.jobs.clear()
 
     def wait_job(self, job_id):
-        deadline = time.monotonic() + 20
+        # Endpoint search permits 60 s before smoothing; allow the full job budget.
+        deadline = time.monotonic() + 90
         while time.monotonic() < deadline:
             result = self.client.get(f"/api/jobs/{job_id}").json()
             if result["status"] != "running":
@@ -27,7 +28,8 @@ class PlanningApiTests(unittest.TestCase):
         self.fail("Planning did not finish")
 
     def test_complete_job_exports_matching_map_options_and_path(self):
-        response = self.client.post("/api/optimize", json={"dataset": "zigzag", "max_deviation": .6})
+        response = self.client.post("/api/optimize", json={"dataset": "zigzag", "max_deviation": .6,
+                                                         "navigation_height": .55, "elevation_radius": 2})
         self.assertEqual(response.status_code, 202)
         job_id = response.json()["id"]
         result = self.wait_job(job_id)
@@ -42,10 +44,21 @@ class PlanningApiTests(unittest.TestCase):
         self.assertEqual(payload["algorithm"], "corridor-shortcut-bspline-v3")
         self.assertGreater(payload["shortcut"]["segments"], 0)
         self.assertEqual(payload["path"][0], server.datasets["zigzag"].route[0].tolist())
+        self.assertEqual(payload["resultSchemaVersion"], 2)
+        self.assertEqual(payload["pathRole"], "ground-support")
+        self.assertEqual(payload["options"]["navigation_height"], .55)
+        self.assertEqual(payload["options"]["elevation_radius"], 2)
+        np.testing.assert_array_equal(np.asarray(payload["path"])[:, :2],
+                                      np.asarray(payload["navigationPath"])[:, :2])
+        self.assertAlmostEqual(payload["navigationPath"][0][2] - payload["path"][0][2], .55)
+        self.assertTrue(payload["navigation"]["validation"]["heightEnvelopeValid"])
+        self.assertEqual(payload["scope"]["validationPath"], "path")
 
     def test_invalid_parameters_and_unknown_resources(self):
         self.assertEqual(self.client.post("/api/optimize", json={"max_deviation": 4}).status_code, 422)
         self.assertEqual(self.client.post("/api/optimize", json={"route": [[0, 0, 0]]}).status_code, 422)
+        for options in ({"navigation_height": .05}, {"elevation_radius": 4}):
+            self.assertEqual(self.client.post("/api/optimize", json=options).status_code, 422)
         self.assertEqual(self.client.get("/api/datasets/missing").status_code, 404)
         self.assertEqual(self.client.get("/api/jobs/missing").status_code, 404)
 

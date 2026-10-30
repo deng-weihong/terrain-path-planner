@@ -39,7 +39,7 @@ Coordinates are local metric XYZ in the map frame, not latitude and longitude. T
 [[1.05, 2.05, 0.05], [1.15, 2.05, 0.05]]
 ```
 
-Dataset route files also accept `{"pathPoints": [...]}` with either arrays or `{"x": 1.05, "y": 2.05, "z": 0.05}` objects. Browser imports additionally accept `path` or `route` array fields. The HTTP `route` parameter uses XYZ arrays.
+Dataset route files also accept `{"pathPoints": [...]}` with either arrays or `{"x": 1.05, "y": 2.05, "z": 0.05}` objects. Browser imports prefer `sourceRoute` in exported results and also accept `pathPoints`, `path`, or `route` arrays; `navigationPath` is never imported as ground. The HTTP `route` parameter uses XYZ arrays.
 
 HTTP input accepts 2-20,000 points and an XY length of 0.1-1,000 m, with finite coordinates. Imported XY points must lie in the map projection; subsequent validation checks the full set of geometric constraints.
 
@@ -51,6 +51,8 @@ HTTP input accepts 2-20,000 points and an XY length of 0.1-1,000 m, with finite 
 | `max_deviation` | 0.8 | 0.05-3 m | Maximum XY displacement at the same reference arc-length parameter |
 | `clearance` | 0.39 | 0-1 m | Target projected clearance, with an adaptive floor in narrow regions |
 | `control_spacing` | 1.5 | 0.4-4 m | Initial B-spline control-point spacing |
+| `navigation_height` | 0.35 | 0.1-1.5 m | Target navigation reference height above ground |
+| `elevation_radius` | 1.5 | 0.3-3 m | Elevation smoothing radius along the reference |
 
 ## HTTP API
 
@@ -88,7 +90,9 @@ Endpoint planning request:
   "smoothness": 6,
   "max_deviation": 0.8,
   "clearance": 0.39,
-  "control_spacing": 1.5
+  "control_spacing": 1.5,
+  "navigation_height": 0.35,
+  "elevation_radius": 1.5
 }
 ```
 
@@ -109,12 +113,17 @@ Polled statuses are `running`, `completed`, or `failed`; execution phases are `p
 | `sourceRoute` | Original XYZ vertices from search or import |
 | `planning` | Search engine, exact endpoints, time, and expanded nodes; null if search was skipped |
 | `reference` | Reference route sampled at the output parameters |
-| `path` | Final XYZ curve samples |
+| `resultSchemaVersion` / `pathRole` | `2` / `ground-support` |
+| `path` | Ground support route checked by `validation` |
+| `navigationPath` | Smoothed elevated reference with the same XY as `path` |
+| `navigation` | Target and actual heights, smoothing, pitch change and separate validation |
 | `rawCandidate` | Initial B-spline candidate for comparison |
 | `baseline` / `optimized` | Metrics before and after optimization |
 | `baselineValidation` / `validation` | Reference and final dense checks |
 | `solver` | Convergence, iterations, timing, continuity, and correction details |
 | `scope` | Implemented checks and unverified scope |
+
+`solver.continuity` describes the ground XY spline; `heightRematchedSamples` counts ground-height rematching. `navigation.heightM` and `smoothingRadiusM` report actual options; `minGroundOffsetM` / `maxGroundOffsetM` report actual reference height relative to the ground route. `navigation.validation.valid` requires both `groundValid` and `heightEnvelopeValid`. Overhead and robot envelope checks remain false. `optimized` still describes the ground route; elevated 3D length and pitch change are reported under `navigation`.
 
 A direct `optimize()` call returns the core algorithm fields. The API adds `sourceRoute`, `planning`, and job provenance.
 

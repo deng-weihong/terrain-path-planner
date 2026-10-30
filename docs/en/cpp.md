@@ -53,7 +53,9 @@ if (search.success) {
 
 `SearchOptions` defines slope, step, clearance, component size, expansion, and time limits. Endpoints must match exact voxel centers within 1e-6 m. `plan_path()` times preparation and search together. `GraphPlanner::plan()` times the current query and accepts an optional smaller budget. Results include `success`, `status`, the raw graph route, costs, and elapsed time. Defaults are 250,000 expansions and 60 seconds.
 
-`Options` matches the four Python parameters. `OptimizationResult` contains the curve, reference route, validation, curvature and clearance metrics, solver state, and protected spans. Invalid inputs throw standard C++ exceptions; failed geometry checks remain visible in the returned result and counters.
+`Options` matches the six Python parameters. `OptimizationResult` contains the curve, reference route, validation, curvature and clearance metrics, solver state, and protected spans. Invalid inputs throw standard C++ exceptions; failed geometry checks remain visible in the returned result and counters.
+
+`result.path` retains the ground support route. `result.navigation_path` is a separate smoothed elevated reference with the same XY, a default height of 0.35 m, and a smoothing radius of 1.5 m. Adjust `Options.navigation_height` and `Options.elevation_radius`; `result.navigation` contains height statistics and separate validation. The corresponding JSON fields are `navigationPath` and `navigation`. See [Data Formats](data-format.md).
 
 ## JSON CLI
 
@@ -69,7 +71,7 @@ Requests contain `resolution` and an integer XYZ array, `voxels`. These represen
 | --- | --- |
 | `route` | Metric XYZ route to smooth; excludes endpoints |
 | `start` / `goal` | Supply both for native XYZ graph search first |
-| `options` | `smoothness`, `max_deviation`, `clearance`, `control_spacing` |
+| `options` | `smoothness`, `max_deviation`, `clearance`, `control_spacing`, `navigation_height`, `elevation_radius` |
 | `operation` | Defaults to `optimize`; `search` returns graph search only |
 | `search` | Overrides `max_iterations` and `maximum_planning_time_ms` |
 | `dataset` / `mapSha256` / `jobId` | Optional provenance copied to optimization output |

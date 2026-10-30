@@ -12,7 +12,7 @@ const dataset = ref<Dataset | null>(null)
 const selectedDataset = ref('obstacles')
 const engines = ref<{ id: Engine; name: string; available: boolean }[]>([{ id: 'python', name: 'Python', available: true }])
 const engine = ref<Engine>('python')
-const options = reactive<Options>({ smoothness: 6, max_deviation: 0.8, clearance: 0.39, control_spacing: 1.5 })
+const options = reactive<Options>({ smoothness: 6, max_deviation: 0.8, clearance: 0.39, control_spacing: 1.5, navigation_height: .35, elevation_radius: 1.5 })
 const result = ref<Result | null>(null)
 const history = ref<Result[]>([])
 const importedRoute = ref<Point[] | null>(null)
@@ -31,6 +31,7 @@ const showRetained = ref(false)
 const showInvalid = ref(true)
 const showSharp = ref(true)
 const showRaw = ref(false)
+const showGround = ref(false)
 const busy = ref(false)
 const loading = ref(true)
 const error = ref('')
@@ -41,7 +42,7 @@ let generation = 0
 let disposed = false
 let clock: ReturnType<typeof setInterval> | undefined
 const sameOptions = (a: Options, b: Options) =>
-  (['smoothness', 'max_deviation', 'clearance', 'control_spacing'] as const).every(key => a[key] === b[key])
+  (['smoothness', 'max_deviation', 'clearance', 'control_spacing', 'navigation_height', 'elevation_radius'] as const).every(key => a[key] === b[key])
 const dirty = computed(() => result.value && (!sameOptions(options, result.value.options)
   || engine.value !== (result.value.engine ?? 'python')))
 const route = computed(() => manualSelection.value ? plannedRoute.value ?? [] : importedRoute.value ?? dataset.value?.route ?? [])
@@ -56,14 +57,15 @@ const status = computed(() => {
   const r = result.value
   if (!r) return { label: '待验证', level: 'neutral' }
   if (r.validation.newViolationCount) return { label: '发现新增问题', level: 'danger' }
+  if (r.navigation && !r.navigation.validation.heightEnvelopeValid) return { label: '参考线高度待复核', level: 'danger' }
   if (r.optimized.denseSharpTurns || r.solver.minimumSpeed < 0.05) return { label: '仍有急转路段', level: 'warning' }
   if (!r.validation.valid) return { label: '原始地形待复核', level: 'warning' }
   return { label: '几何校验通过', level: 'success' }
 })
 const presets: { label: string; values: Options }[] = [
-  { label: '保守', values: { smoothness: 2, max_deviation: 0.4, clearance: 0.39, control_spacing: 1 } },
-  { label: '均衡', values: { smoothness: 6, max_deviation: 0.8, clearance: 0.39, control_spacing: 1.5 } },
-  { label: '强平滑', values: { smoothness: 30, max_deviation: 1.5, clearance: 0.39, control_spacing: 2.5 } },
+  { label: '保守', values: { smoothness: 2, max_deviation: 0.4, clearance: 0.39, control_spacing: 1, navigation_height: .35, elevation_radius: 1.5 } },
+  { label: '均衡', values: { smoothness: 6, max_deviation: 0.8, clearance: 0.39, control_spacing: 1.5, navigation_height: .35, elevation_radius: 1.5 } },
+  { label: '强平滑', values: { smoothness: 30, max_deviation: 1.5, clearance: 0.39, control_spacing: 2.5, navigation_height: .35, elevation_radius: 1.5 } },
 ]
 const validations = computed(() => result.value ? [
   { label: '地图外采样', value: result.value.validation.outsideCount, unit: '个' },
@@ -208,7 +210,7 @@ async function importFile(event: Event) {
   if (!file) return
   try {
     const value = JSON.parse(await file.text())
-    const source = Array.isArray(value) ? value : value.pathPoints ?? value.path ?? value.route
+    const source = Array.isArray(value) ? value : value.sourceRoute ?? value.pathPoints ?? value.path ?? value.route
     if (!Array.isArray(source) || source.length < 2 || source.length > 20000) throw new Error('路线需要包含 2–20,000 个 XYZ 点')
     const points = source.map((p: unknown) => {
       const item = p as Point & { x: number; y: number; z: number }
@@ -287,8 +289,10 @@ onBeforeUnmount(() => { disposed = true; clearInterval(clock); window.removeEven
           <div class="parameter"><label for="deviation">最大偏离</label><div class="number-unit"><input id="deviation-number" v-model.number="options.max_deviation" aria-label="最大偏离数值" :disabled="busy" type="number" min="0.05" max="3" step="0.05" /><span>m</span></div><input id="deviation" v-model.number="options.max_deviation" :disabled="busy" type="range" min="0.05" max="3" step="0.05" /></div>
           <div class="parameter"><label for="clearance">目标边界距离</label><div class="number-unit"><input v-model.number="options.clearance" aria-label="目标边界距离数值" :disabled="busy" type="number" min="0" max="1" step="0.01" /><span>m</span></div><input id="clearance" v-model.number="options.clearance" :disabled="busy" type="range" min="0" max="1" step="0.01" /></div>
           <div class="parameter"><label for="spacing">控制点间距</label><div class="number-unit"><input v-model.number="options.control_spacing" aria-label="控制点间距数值" :disabled="busy" type="number" min="0.4" max="4" step="0.1" /><span>m</span></div><input id="spacing" v-model.number="options.control_spacing" :disabled="busy" type="range" min="0.4" max="4" step="0.1" /></div>
+          <div class="parameter"><label for="navigation-height">参考线离地高度</label><div class="number-unit"><input v-model.number="options.navigation_height" aria-label="参考线离地高度数值" :disabled="busy" type="number" min="0.1" max="1.5" step="0.05" /><span>m</span></div><input id="navigation-height" v-model.number="options.navigation_height" :disabled="busy" type="range" min="0.1" max="1.5" step="0.05" /></div>
+          <div class="parameter"><label for="elevation-radius">地形平滑范围</label><div class="number-unit"><input v-model.number="options.elevation_radius" aria-label="地形平滑范围数值" :disabled="busy" type="number" min="0.3" max="3" step="0.1" /><span>m</span></div><input id="elevation-radius" v-model.number="options.elevation_radius" :disabled="busy" type="range" min="0.3" max="3" step="0.1" /></div>
           <button class="run-button" :disabled="!canOptimize" @click="run()"><LoaderCircle v-if="busy" :size="17" class="spin" /><Play v-else :size="16" />{{ busy ? `${phaseLabel} ${elapsed.toFixed(1)} s` : '运行优化' }}</button>
-          <div class="parameter-caption"><span v-if="dirty" class="pending-dot" /><span>{{ dirty ? '参数已更改 · 结果待更新' : busy ? phaseLabel : manualSelection && !plannedRoute ? '待规划路线' : '全路径平滑' }}</span></div>
+          <div class="parameter-caption"><span v-if="dirty" class="pending-dot" /><span>{{ dirty ? '参数已更改 · 结果待更新' : busy ? phaseLabel : manualSelection && !plannedRoute ? '待规划路线' : '地面路线与上方参考线' }}</span></div>
         </section>
 
         <section class="validation-section">
@@ -297,6 +301,7 @@ onBeforeUnmount(() => { disposed = true; clearInterval(clock); window.removeEven
             <div class="validation-overview" :class="result.validation.newViolationCount ? 'danger' : 'success'"><CircleCheck v-if="!result.validation.newViolationCount" :size="17" /><CircleAlert v-else :size="17" /><span>新增问题</span><strong>{{ result.validation.newViolationCount }}</strong></div>
             <dl class="detail-list"><div v-for="item in validations" :key="item.label"><dt>{{ item.label }}</dt><dd :class="{ 'warning-text': item.value > 0 }">{{ item.value }} <small>{{ item.unit }}</small></dd></div></dl>
             <div v-if="result.validation.inheritedViolationCount" class="inherited-note"><CircleAlert :size="14" /><span>原始路线保留 {{ result.validation.inheritedViolationCount }} 个待核验采样点</span></div>
+            <dl v-if="result.navigation" class="detail-list secondary-details"><div><dt>导航参考线</dt><dd>上方平滑参考线</dd></div><div><dt>实际离地高度</dt><dd>{{ number(result.navigation.minGroundOffsetM, 2) }}–{{ number(result.navigation.maxGroundOffsetM, 2) }} m</dd></div><div><dt>地面支撑校验</dt><dd>{{ result.validation.valid ? '通过' : '待复核' }}</dd></div><div><dt>参考线高度范围</dt><dd>{{ result.navigation.validation.heightEnvelopeValid ? '通过' : '待复核' }}</dd></div><div><dt>上方净空 / 机身碰撞</dt><dd class="muted">未验证</dd></div></dl>
             <dl class="detail-list secondary-details"><div><dt>局部最大转角 / 5 cm</dt><dd :class="{ 'warning-text': result.optimized.denseSharpTurns > 0 }">{{ number(result.optimized.maxHeadingChangeDeg, 2) }}°</dd></div><div><dt>急转采样（&gt;5°）</dt><dd :class="{ 'warning-text': result.optimized.denseSharpTurns > 0 }">{{ result.optimized.denseSharpTurns }} 个</dd></div><div><dt>平面曲线连续性</dt><dd :class="{ 'warning-text': result.solver.minimumSpeed < 0.05 }">{{ result.solver.minimumSpeed < 0.05 ? '切线待核验' : 'XY C² 连续' }}</dd></div><div><dt>去绕行直达段</dt><dd>{{ result.shortcut.segments }} 段</dd></div><div><dt>高程重匹配</dt><dd>{{ result.solver.heightRematchedSamples }} 点</dd></div><div><dt>采样数 / 最大间隔</dt><dd>{{ result.validation.sampleCount.toLocaleString() }} / {{ number(result.validation.sampleSpacingM, 3) }} m</dd></div><div><dt>最大实际偏离</dt><dd>{{ number(result.validation.maxDeviationM, 3) }} m</dd></div><div><dt>近似保留路段</dt><dd>{{ result.solver.retainedPercent.toFixed(1) }}%</dd></div><div><dt>求解收敛</dt><dd :class="{ 'warning-text': !result.solver.converged }">{{ result.solver.converged ? '已收敛' : '未收敛' }} · {{ result.solver.iterations }} 次</dd></div><div><dt>完整 3D 校验 / 实机</dt><dd class="muted">未验证</dd></div></dl>
           </template>
           <div v-else class="empty-state">{{ busy ? '正在计算校验结果' : '暂无结果' }}</div>
@@ -345,14 +350,14 @@ onBeforeUnmount(() => { disposed = true; clearInterval(clock); window.removeEven
               <button class="icon-button" title="恢复样例路线" aria-label="恢复样例路线" :disabled="controlsDisabled || !dataset" @click="restoreSample"><RotateCcw :size="15" /></button>
             </div>
           </div>
-          <MapCanvas v-if="dataset" ref="mapCanvas" :key="dataset.id" :dataset="dataset" :route="route" :result="result" :mode="mode" :show-retained="showRetained" :show-invalid="showInvalid" :show-sharp="showSharp" :show-raw="showRaw" :start="start?.point ?? null" :goal="goal?.point ?? null" :pick-mode="pickMode" :picking-disabled="controlsDisabled" @pick="pickEndpoint" @map-error="error = $event" />
+          <MapCanvas v-if="dataset" ref="mapCanvas" :key="dataset.id" :dataset="dataset" :route="route" :result="result" :mode="mode" :show-retained="showRetained" :show-invalid="showInvalid" :show-sharp="showSharp" :show-raw="showRaw" :show-ground="showGround" :start="start?.point ?? null" :goal="goal?.point ?? null" :pick-mode="pickMode" :picking-disabled="controlsDisabled" @pick="pickEndpoint" @map-error="error = $event" />
           <div v-else class="map-placeholder"><LoaderCircle v-if="loading" :size="26" class="spin" /><Map v-else :size="30" /><span>{{ loading ? '加载地图' : '地图尚未加载' }}</span><button v-if="!loading" class="text-button" @click="loadDataset(selectedDataset)">重新加载</button></div>
-          <div class="map-legend"><span class="legend-item"><i class="line-swatch baseline" />原始路线</span><span class="legend-item"><i class="line-swatch optimized" />优化路线</span><span class="legend-divider" /><label><input v-model="showRetained" type="checkbox" /><i class="line-swatch retained" />保留段</label><label><input v-model="showInvalid" type="checkbox" /><i class="point-swatch" />待核验点</label><label><input v-model="showSharp" type="checkbox" /><i class="turn-swatch" />急转点</label><label class="raw-toggle"><input v-model="showRaw" type="checkbox" /><i class="line-swatch raw" />修复前候选</label></div>
+          <div class="map-legend"><span class="legend-item"><i class="line-swatch baseline" />原始地面路线</span><span class="legend-item"><i class="line-swatch optimized" />导航参考线</span><span class="legend-divider" /><label><input v-model="showGround" type="checkbox" /><i class="line-swatch ground" />地面支撑</label><label><input v-model="showRetained" type="checkbox" /><i class="line-swatch retained" />保留段</label><label><input v-model="showInvalid" type="checkbox" /><i class="point-swatch" />待核验点</label><label><input v-model="showSharp" type="checkbox" /><i class="turn-swatch" />急转点</label><label class="raw-toggle"><input v-model="showRaw" type="checkbox" /><i class="line-swatch raw" />修复前候选</label></div>
           <div v-if="busy || picking" class="computing-indicator"><LoaderCircle :size="14" class="spin" />{{ picking ? '读取地面高程' : `${phaseLabel}中 ${elapsed.toFixed(1)} s` }}</div>
         </div>
         <CurvatureChart v-if="oldMetrics" :baseline="oldMetrics" :optimized="metrics" />
         <div v-else class="curvature-panel empty-state">{{ manualSelection ? '待规划路线' : '暂无路线数据' }}</div>
-        <footer class="workspace-footer"><span><span class="connection-dot" />{{ dataset ? `${dataset.voxelCount.toLocaleString()} 体素` : '连接中' }}<span class="footer-divider">/</span>{{ route.length.toLocaleString() }} 原始路径点</span><span v-if="result">边距不足占比 {{ result.optimized.belowClearancePercent.toFixed(1) }}%<span class="footer-divider">/</span>二维几何与高程检查</span></footer>
+        <footer class="workspace-footer"><span><span class="connection-dot" />{{ dataset ? `${dataset.voxelCount.toLocaleString()} 体素` : '连接中' }}<span class="footer-divider">/</span>{{ route.length.toLocaleString() }} 原始路径点</span><span v-if="result">边距不足占比 {{ result.optimized.belowClearancePercent.toFixed(1) }}%<span class="footer-divider">/</span>地面支撑检查 · 上方参考线</span></footer>
       </section>
     </main>
   </div>

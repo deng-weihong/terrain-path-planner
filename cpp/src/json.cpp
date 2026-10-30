@@ -76,12 +76,34 @@ nlohmann::json to_json(const OptimizationResult& r) {
              {{"smoothness", r.options.smoothness},
               {"max_deviation", r.options.max_deviation},
               {"clearance", r.options.clearance},
-              {"control_spacing", r.options.control_spacing}}},
+              {"control_spacing", r.options.control_spacing},
+              {"navigation_height", r.options.navigation_height},
+              {"elevation_radius", r.options.elevation_radius}}},
             {"baseline", metrics_json(r.baseline)},
             {"optimized", metrics_json(r.optimized)},
             {"validation", validation_json(r.validation)},
             {"baselineValidation", validation_json(r.baseline_validation)},
             {"path", r.path},
+            {"resultSchemaVersion", 2},
+            {"pathRole", "ground-support"},
+            {"navigationPath", r.navigation_path},
+            {"navigation",
+             {{"algorithm", "elevated-reference-v1"},
+              {"heightM", r.navigation.height_m},
+              {"smoothingRadiusM", r.navigation.smoothing_radius_m},
+              {"minimumAllowedHeightM", r.navigation.minimum_allowed_height_m},
+              {"maximumAllowedHeightM", r.navigation.maximum_allowed_height_m},
+              {"minGroundOffsetM", r.navigation.min_ground_offset_m},
+              {"maxGroundOffsetM", r.navigation.max_ground_offset_m},
+              {"smoothedSamples", r.navigation.smoothed_samples},
+              {"maxSmoothingAdjustmentM", r.navigation.max_smoothing_adjustment_m},
+              {"maxPitchChangeDeg", r.navigation.max_pitch_change_deg},
+              {"length3dM", r.navigation.length3d_m},
+              {"validation", {{"valid", r.navigation.valid},
+                              {"groundValid", r.navigation.ground_valid},
+                              {"heightEnvelopeValid", r.navigation.height_envelope_valid},
+                              {"ceilingClearanceVerified", false},
+                              {"robotEnvelopeVerified", false}}}}},
             {"reference", r.reference},
             {"rawCandidate", r.raw_candidate},
             {"sourceRoute", r.source_route},
@@ -109,6 +131,10 @@ nlohmann::json to_json(const OptimizationResult& r) {
                {"XY occupancy", "diagonal support", "local terrain layer", "preserved steps",
                 "deviation", "boundary floor", "endpoints"}},
               {"production3dGraphVerified", false},
+              {"validationPath", "path"},
+              {"navigationPathRole", "elevated-reference"},
+              {"ceilingClearanceVerified", false},
+              {"robotEnvelopeVerified", false},
               {"robotExecutionVerified", false}}}};
 }
 
@@ -144,6 +170,8 @@ nlohmann::json run_request(const nlohmann::json& request) {
         options.max_deviation = o.value("max_deviation", options.max_deviation);
         options.clearance = o.value("clearance", options.clearance);
         options.control_spacing = o.value("control_spacing", options.control_spacing);
+        options.navigation_height = o.value("navigation_height", options.navigation_height);
+        options.elevation_radius = o.value("elevation_radius", options.elevation_radius);
     }
     const auto operation = request.value("operation", std::string("optimize"));
     if (operation != "search" && operation != "optimize")

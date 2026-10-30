@@ -13,6 +13,8 @@ export interface Options {
   max_deviation: number
   clearance: number
   control_spacing: number
+  navigation_height: number
+  elevation_radius: number
 }
 
 export interface Metrics {
@@ -78,6 +80,25 @@ export interface Result {
   validation: Validation
   baselineValidation: Validation
   path: Point[]
+  pathRole?: 'ground-support'
+  resultSchemaVersion?: number
+  navigationPath?: Point[]
+  navigation?: {
+    heightM: number
+    smoothingRadiusM: number
+    minGroundOffsetM: number
+    maxGroundOffsetM: number
+    smoothedSamples: number
+    maxSmoothingAdjustmentM: number
+    maxPitchChangeDeg: number
+    validation: {
+      valid: boolean
+      groundValid: boolean
+      heightEnvelopeValid: boolean
+      ceilingClearanceVerified: boolean
+      robotEnvelopeVerified: boolean
+    }
+  }
   sourceRoute: Point[]
   planning: {
     engine: string

@@ -39,7 +39,7 @@ my-map/
 [[1.05, 2.05, 0.05], [1.15, 2.05, 0.05]]
 ```
 
-数据集路线文件还接受 `{"pathPoints": [...]}`，其中每点可用数组或 `{"x": 1.05, "y": 2.05, "z": 0.05}`。浏览器导入还接受 `path`、`route` 数组字段。HTTP `route` 参数使用 XYZ 数组。
+数据集路线文件还接受 `{"pathPoints": [...]}`，其中每点可用数组或 `{"x": 1.05, "y": 2.05, "z": 0.05}`。浏览器导入优先读取导出文件的 `sourceRoute`，也接受 `pathPoints`、`path`、`route` 数组字段；不会把 `navigationPath` 当成地面路线。HTTP `route` 参数使用 XYZ 数组。
 
 HTTP 输入限制为 2–20,000 点、XY 长度 0.1–1,000 m，所有坐标有限。导入路线的 XY 点必须处于地图投影中；完整几何约束仍由后续校验判断。
 
@@ -51,6 +51,8 @@ HTTP 输入限制为 2–20,000 点、XY 长度 0.1–1,000 m，所有坐标有�
 | `max_deviation` | 0.8 | 0.05–3 m | 同原始弧长参数下的最大 XY 位移 |
 | `clearance` | 0.39 | 0–1 m | 目标投影边距；窄处采用自适应下限 |
 | `control_spacing` | 1.5 | 0.4–4 m | 初始 B-Spline 控制点间距 |
+| `navigation_height` | 0.35 | 0.1–1.5 m | 上方参考线的目标离地高度 |
+| `elevation_radius` | 1.5 | 0.3–3 m | 参考高程沿程平滑半径 |
 
 ## HTTP 接口
 
@@ -88,7 +90,9 @@ HTTP 输入限制为 2–20,000 点、XY 长度 0.1–1,000 m，所有坐标有�
   "smoothness": 6,
   "max_deviation": 0.8,
   "clearance": 0.39,
-  "control_spacing": 1.5
+  "control_spacing": 1.5,
+  "navigation_height": 0.35,
+  "elevation_radius": 1.5
 }
 ```
 
@@ -109,12 +113,17 @@ HTTP 输入限制为 2–20,000 点、XY 长度 0.1–1,000 m，所有坐标有�
 | `sourceRoute` | 搜索得到或导入的原始 XYZ 顶点 |
 | `planning` | 图搜索引擎、精确端点、时间、展开数；未搜路时为 null |
 | `reference` | 按输出参数采样的原路线对照 |
-| `path` | 最终 XYZ 曲线采样 |
+| `resultSchemaVersion` / `pathRole` | `2` / `ground-support` |
+| `path` | 最终地面支撑路线；`validation` 检查此字段 |
+| `navigationPath` | 与 `path` 同 XY 的上方平滑参考线 |
+| `navigation` | 参考高度、实际高度范围、平滑量、竖向转角和独立校验 |
 | `rawCandidate` | 初始 B-Spline 候选，仅供对比 |
 | `baseline` / `optimized` | 原始与优化后的指标 |
 | `baselineValidation` / `validation` | 原始与最终密集检查 |
 | `solver` | 收敛、迭代、耗时、连续性及修正信息 |
 | `scope` | 已实施的检查与尚未验证的范围 |
+
+`solver.continuity` 描述地面 XY 样条连续性，`heightRematchedSamples` 统计地面高度重匹配。`navigation.heightM` 和 `smoothingRadiusM` 是实际参数，`minGroundOffsetM` / `maxGroundOffsetM` 是相对地面路线的实际高度范围。`navigation.validation.valid` 同时要求 `groundValid` 与 `heightEnvelopeValid`。上方净空和机器人外形检查标记均为 false。`optimized` 仍报告地面路线指标，参考线的三维长度与竖向转角在 `navigation` 中提供。
 
 直接调用 `optimize()` 返回核心算法字段；`sourceRoute`、`planning` 和任务来源由接口层补充。
 

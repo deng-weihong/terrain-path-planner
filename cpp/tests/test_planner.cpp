@@ -97,6 +97,35 @@ int main() {
                 "Repeated bends remain");
         require(result.validation.max_deviation_m <= .800001, "Corridor exceeded");
     });
+    test("elevated reference filters a bump while preserving ground", [] {
+        auto keys = rectangle(110, 80);
+        for (auto& key : keys)
+            key[2] = key[0] == 42 ? 1 : 0;
+        const Path route{{1.05, 4.05, .05}, {4.15, 4.05, .05}, {4.25, 4.05, .15},
+                         {4.35, 4.05, .05}, {9.05, 4.05, .05}};
+        const GridMap grid(keys);
+        const auto result = optimize(grid, route);
+        require(result.path.front() == route.front() && result.path.back() == route.back(),
+                "Ground endpoints changed");
+        require(result.validation.valid && result.navigation.valid, "Validation failed");
+        require(result.navigation.smoothed_samples > 0, "Reference not smoothed");
+        double minimum = 1, maximum = 0;
+        for (std::size_t i = 0; i < result.path.size(); ++i) {
+            require(result.path[i][0] == result.navigation_path[i][0] &&
+                        result.path[i][1] == result.navigation_path[i][1], "Reference XY moved");
+            minimum = std::min(minimum, result.navigation_path[i][2]);
+            maximum = std::max(maximum, result.navigation_path[i][2]);
+        }
+        require(maximum - minimum < .02, "One-cell bump not filtered");
+        require(result.navigation.min_ground_offset_m >= .2 - 1e-8, "Reference too low");
+        require(result.navigation.max_ground_offset_m <= .5 + 1e-8, "Reference too high");
+        Options options;
+        options.navigation_height = .8;
+        const auto higher = optimize(grid, route, options);
+        require(higher.path == result.path, "Reference height changed ground route");
+        require(std::abs(higher.navigation_path.front()[2] - route.front()[2] - .8) < 1e-12,
+                "Elevated endpoint height incorrect");
+    });
     test("invalid baseline is reported", [] {
         const auto result = optimize(GridMap({{0, 0, 0}, {2, 0, 0}, {3, 0, 0}}),
                                      {{.05, .05, .05}, {.35, .05, .05}});

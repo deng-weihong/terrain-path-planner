@@ -13,6 +13,7 @@ const props = defineProps<{
   showInvalid: boolean
   showSharp: boolean
   showRaw: boolean
+  showGround: boolean
   start: Point | null
   goal: Point | null
   pickMode: PickMode
@@ -142,7 +143,7 @@ onMounted(() => {
   loadMap()
 })
 watch(() => props.dataset.id, loadMap)
-watch(() => [props.result, props.mode, props.showRetained, props.showInvalid, props.showSharp, props.showRaw, props.route, props.start?.join(','), props.goal?.join(',')], updateLayers, { deep: false })
+watch(() => [props.result, props.mode, props.showRetained, props.showInvalid, props.showSharp, props.showRaw, props.showGround, props.route, props.start?.join(','), props.goal?.join(',')], updateLayers, { deep: false })
 watch(() => props.pickMode, mode => { scene?.setNavigation(mode); tap = null })
 watch(cameraView, view => scene?.setView(view))
 watch(mapStyle, style => scene?.setStyle(style))

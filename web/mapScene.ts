@@ -17,6 +17,7 @@ export interface Layers {
   showInvalid: boolean
   showSharp: boolean
   showRaw: boolean
+  showGround: boolean
   start: Point | null
   goal: Point | null
 }
@@ -279,9 +280,9 @@ export class MapScene {
     return [(this.keys[index * 3] + .5) * r, (this.keys[index * 3 + 1] + .5) * r, (this.keys[index * 3 + 2] + .5) * r]
   }
 
-  private line(points: Point[], color: string, width: number, dashed = false, segments = false) {
+  private line(points: Point[], color: string, width: number, dashed = false, segments = false, lift = .10) {
     if (points.length < 2) return
-    const positions = points.flatMap(point => [point[0], point[1], point[2] + .10])
+    const positions = points.flatMap(point => [point[0], point[1], point[2] + lift])
     const geometry = segments ? new LineSegmentsGeometry() : new LineGeometry()
     geometry.setPositions(positions)
     const material = new LineMaterial({ color, linewidth: width, dashed, dashSize: .6, gapSize: .4,
@@ -325,15 +326,18 @@ export class MapScene {
     disposeObjects(this.markers)
     const reference = layers.result?.reference ?? layers.route
     const result = layers.result
-    this.routePoints = result?.path ?? layers.route
+    this.routePoints = result?.navigationPath ?? result?.path ?? layers.route
     if (layers.mode !== 'optimized' || !result) {
       this.line(reference, '#ffffff', layers.mode === 'compare' ? 8 : 7)
       this.line(reference, '#c6801e', layers.mode === 'compare' ? 6 : 3.5, true)
     }
     if (result && layers.showRaw) this.line(result.rawCandidate, '#8a66aa', 2, true)
     if (result && layers.mode !== 'baseline') {
-      if (layers.mode !== 'compare') this.line(result.path, '#ffffff', 7)
-      this.line(result.path, '#087f73', 3.2)
+      const navigation = result.navigationPath ?? result.path
+      const lift = result.navigationPath ? 0 : .10
+      if (layers.showGround) this.line(result.path, '#667b87', 2)
+      if (layers.mode !== 'compare') this.line(navigation, '#ffffff', 7, false, false, lift)
+      this.line(navigation, '#087f73', 3.2, false, false, lift)
       if (layers.showRetained) {
         const segments: Point[] = []
         const retained = new Set(result.retainedIndices)

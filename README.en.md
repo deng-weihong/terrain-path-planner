@@ -6,6 +6,8 @@ Path search on traversable voxel graphs and whole-path smoothing, with standalon
 
 The planner searches a graph that preserves terrain elevation, removes unnecessary detours within the original route corridor, and jointly optimizes the entire curve. The viewer supports manual start and goal selection, elevation layers, parameter adjustment, curvature and clearance comparisons, and result export. It runs independently of robots, ROS, and external application servers.
 
+An elevated navigation reference is generated separately from the ground route used for traversability checks. Its default height is 0.35 m; the viewer adjusts height and smoothing radius and toggles ground support display. Exports include both `path` (ground) and `navigationPath` (elevated reference).
+
 Both Python and C++ implement XYZ graph search, corridor constraints, visibility shortcuts, whole-path B-spline optimization, continuous spline refinement, and geometry validation. C++ provides a CMake library and a JSON CLI that run independently of Python and the Web interface. See [C++ Usage and Design](docs/en/cpp.md).
 
 ![3D map, route comparison, and validation results](docs/images/desktop.png)
@@ -35,6 +37,8 @@ To use the algorithm without the viewer:
 
 For frontend development, run `npm start` and `npm run dev` in separate terminals, then open <http://localhost:5182>. The npm commands prefer the project `.venv`; set `PATH_PLANNER_PYTHON` to choose another interpreter.
 
+These commands run test processes in the current terminal without installing a system service or configuring automatic startup. Press `Ctrl+C` when finished.
+
 ## C++ Quick Start
 
 Requires C++17, CMake 3.18+, Eigen 3.3+, and nlohmann/json. The L-BFGS-B solver is provided by a pinned LBFGSpp version. On Ubuntu / Debian:
@@ -50,6 +54,16 @@ ctest --test-dir build/cpp --output-on-failure
 
 The first configuration downloads LBFGSpp v0.3.0 with SHA-256 verification; local headers can be supplied for offline builds. After building, select C++ in the viewer's engine menu. The library and CLI need no Python, Node.js, or HTTP service.
 
+## Smoothing Terrain Elevation
+
+Click “运行优化” (Run optimization), then enable “地面支撑” (Ground support) to compare the ground route with the elevated navigation reference. The reference height defaults to 0.35 m and the along-route smoothing radius to 1.5 m. Rerun after changing either option. Adding a constant height alone preserves vertical bends, so the reference also smooths elevation while limiting its height relative to ground.
+
+In the synthetic example below, a bump 100 mm high and 100 mm wide produces about 7.3 mm of reference height variation, while the ground support data stays unchanged. This measurement describes this example only; large steps and conflicting height constraints can still retain bends.
+
+![Ground support, constant lift, and smoothed reference over a one-cell bump](docs/images/elevated-reference.png)
+
+`path` remains the ground route used for traversability checks; `navigationPath` provides the elevated reference. Overhead clearance and robot envelope collisions have not been checked. See [Data Formats and API](docs/en/data-format.md) for fields, options, and validation scope.
+
 ## Pipeline
 
 ```text
@@ -61,7 +75,8 @@ Traversable XYZ voxels + start and goal
   -> Global cubic B-spline control-point optimization
   -> Ground elevation matching and clearance correction
   -> Constraint refinement using one C2 planar spline
-  -> Dense validation / metrics / export
+  -> Dense ground validation / metrics
+  -> Separate elevated reference / height envelope checks / export both routes
 ```
 
 Graph search and final curve validation cover different constraints. Search preserves XYZ adjacency; smoothing primarily optimizes XY and checks ground layers separately. The final curve has not been revalidated edge by edge against the complete 3D graph. Clearance is estimated from the XY projection of traversable ground and does not include the robot footprint. Existing problems in the reference route are counted separately, so `newViolationCount = 0` does not mean that every check passed. See [Algorithm Design](docs/en/algorithm.md).

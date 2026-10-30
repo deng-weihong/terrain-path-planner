@@ -15,8 +15,9 @@ flowchart LR
     Core --> Search[XYZ 图搜索]
     Search --> Smooth[全路径曲线优化]
     Smooth --> Validate[密集校验与指标]
-    Validate --> Python
-    Validate --> API
+    Validate --> Elevated[上方导航参考线]
+    Elevated --> Python
+    Elevated --> API
 ```
 
 ## 模块职责
@@ -41,6 +42,8 @@ flowchart LR
 **端点规划：** 端点选择 -> 高程层校验 -> 精确端点 XYZ 图搜索 -> `sourceRoute` -> 全路径优化 -> 校验与指标。
 
 **已有路线：** 样本或导入路线 -> 输入校验 -> 全路径优化 -> 校验与指标。
+
+输出保留 `path` 作为地面支撑路线和 `validation` 的检查对象；独立的 `navigationPath` 共享 XY 并生成平滑的上方参考高度。显示主线使用后者，导出保留两者，点选和搜索端点继续使用地面坐标。
 
 参数重跑保留上次的 `sourceRoute`，不把密集输出曲线重新当作地形原始路线。任务阶段分别为 `planning` 和 `optimizing`。
 

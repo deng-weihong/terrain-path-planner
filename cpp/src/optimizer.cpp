@@ -375,6 +375,95 @@ std::vector<std::size_t> new_failures(const Validation& checked, const Validatio
     return failures;
 }
 
+Path navigation_reference(const Path& ground, const Options& options, bool ground_valid,
+                          NavigationInfo& info) {
+    const auto sampled = resample(ground, .025);
+    const auto& query = sampled.second;
+    const double radius = options.elevation_radius;
+    const double spacing = query[1] - query[0];
+    const int half = static_cast<int>(std::ceil(radius / spacing));
+    std::vector<double> kernel, filtered(query.size(), 0);
+    double sum = 0;
+    for (int j = -half; j <= half; ++j) {
+        const double value = std::max(0.0, 1 - std::pow(j * spacing / radius, 2));
+        kernel.push_back(value * value * value);
+        sum += kernel.back();
+    }
+    for (int i = 0; i < static_cast<int>(query.size()); ++i)
+        for (int j = -half; j <= half; ++j) {
+            const int index = std::max(0, std::min(static_cast<int>(query.size()) - 1, i + j));
+            filtered[i] += sampled.first[index][2] * kernel[j + half] / sum;
+        }
+    const auto distance_s = arc_length(ground);
+    const double minimum = std::max(.05, options.navigation_height - .15);
+    const double maximum = options.navigation_height + .15;
+    std::vector<bool> fixed(ground.size(), false);
+    fixed.front() = fixed.back() = true;
+    Path output = ground;
+    bool accepted = false;
+    for (int pass = 0; pass < 6; ++pass) {
+        std::vector<double> anchors;
+        for (std::size_t i = 0; i < ground.size(); ++i)
+            if (fixed[i])
+                anchors.push_back(distance_s[i]);
+        accepted = true;
+        for (std::size_t i = 0; i < ground.size(); ++i) {
+            const auto found = std::lower_bound(anchors.begin(), anchors.end(), distance_s[i]);
+            double nearest = std::numeric_limits<double>::infinity();
+            if (found != anchors.end())
+                nearest = std::abs(*found - distance_s[i]);
+            if (found != anchors.begin())
+                nearest = std::min(nearest, std::abs(*std::prev(found) - distance_s[i]));
+            const double t = clamp(nearest / radius, 0, 1);
+            const double blend = t * t * t * (10 - 15 * t + 6 * t * t);
+            output[i][2] = ground[i][2] + options.navigation_height;
+            if (!fixed[i])
+                output[i][2] += blend * (interpolate(query, filtered, distance_s[i]) - ground[i][2]);
+            const double height = output[i][2] - ground[i][2];
+            if (height < minimum - 1e-8 || height > maximum + 1e-8) {
+                fixed[i] = true;
+                accepted = false;
+            }
+        }
+        if (accepted)
+            break;
+    }
+    if (!accepted)
+        for (std::size_t i = 0; i < ground.size(); ++i)
+            output[i][2] = ground[i][2] + options.navigation_height;
+    info.height_m = options.navigation_height;
+    info.smoothing_radius_m = radius;
+    info.minimum_allowed_height_m = minimum;
+    info.maximum_allowed_height_m = maximum;
+    info.min_ground_offset_m = std::numeric_limits<double>::infinity();
+    info.max_ground_offset_m = -std::numeric_limits<double>::infinity();
+    info.height_envelope_valid = true;
+    for (std::size_t i = 0; i < ground.size(); ++i) {
+        const double height = output[i][2] - ground[i][2];
+        info.min_ground_offset_m = std::min(info.min_ground_offset_m, height);
+        info.max_ground_offset_m = std::max(info.max_ground_offset_m, height);
+        const double adjustment = std::abs(height - options.navigation_height);
+        info.smoothed_samples += adjustment > 1e-6;
+        info.max_smoothing_adjustment_m = std::max(info.max_smoothing_adjustment_m, adjustment);
+        info.height_envelope_valid = info.height_envelope_valid && finite(output[i]) &&
+                                    height >= minimum - 1e-8 && height <= maximum + 1e-8;
+        if (i > 0)
+            info.length3d_m += distance(output[i], output[i - 1]);
+    }
+    const auto dense = resample(output, .05).first;
+    double previous_pitch = 0;
+    for (std::size_t i = 1; i < dense.size(); ++i) {
+        const double pitch = std::atan2(dense[i][2] - dense[i - 1][2], xy_distance(dense[i], dense[i - 1]));
+        if (i > 1)
+            info.max_pitch_change_deg = std::max(info.max_pitch_change_deg,
+                                               std::abs(pitch - previous_pitch) * 180 / pi);
+        previous_pitch = pitch;
+    }
+    info.ground_valid = ground_valid;
+    info.valid = ground_valid && info.height_envelope_valid;
+    return output;
+}
+
 double percentile(std::vector<double> values, double fraction) {
     if (values.empty())
         return 0;
@@ -445,7 +534,9 @@ OptimizationResult optimize(const GridMap& grid, const Path& path, Options optio
         throw std::invalid_argument("Route must contain 2 to 20000 XYZ points");
     if (!(options.smoothness >= .1 && options.smoothness <= 60 && options.max_deviation >= .05 &&
           options.max_deviation <= 3 && options.clearance >= 0 && options.clearance <= 1 &&
-          options.control_spacing >= .4 && options.control_spacing <= 4))
+          options.control_spacing >= .4 && options.control_spacing <= 4 &&
+          options.navigation_height >= .1 && options.navigation_height <= 1.5 &&
+          options.elevation_radius >= .3 && options.elevation_radius <= 3))
         throw std::invalid_argument("Optimization parameters are outside the supported limits");
     const auto uniform = resample(path, .025);
     const Reference reference(path);
@@ -730,6 +821,8 @@ OptimizationResult optimize(const GridMap& grid, const Path& path, Options optio
         out.solver.height_rematched_samples +=
             std::abs(out.path[i][2] - out.reference[i][2]) > 1e-8;
     }
+    out.navigation_path = navigation_reference(out.path, options, out.validation.valid,
+                                               out.navigation);
     out.baseline = metrics(grid, path, options.clearance);
     out.optimized = metrics(grid, out.path, options.clearance);
     out.solver.control_points = n;

@@ -22,6 +22,9 @@ def main():
         "inheritedViolationCount": result["validation"]["inheritedViolationCount"],
         "start": result["path"][0],
         "goal": result["path"][-1],
+        "navigationStart": result["navigationPath"][0],
+        "navigationGoal": result["navigationPath"][-1],
+        "navigation": result["navigation"],
     }, indent=2))
 
 

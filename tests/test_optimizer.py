@@ -3,7 +3,9 @@ import unittest
 import numpy as np
 
 from terrain_planner.datasets import load_datasets
-from terrain_planner.optimizer import GridMap, Options, TerrainProfile, arc_length, check_path, optimize, resample
+from terrain_planner.optimizer import (
+    GridMap, Options, TerrainProfile, arc_length, check_path, navigation_reference, optimize, resample,
+)
 
 
 class WholePathTests(unittest.TestCase):
@@ -121,6 +123,65 @@ class WholePathTests(unittest.TestCase):
         self.assertGreater(result["solver"]["heightRematchedSamples"], 0)
         self.assertLess(result["optimized"]["turningDeg"], .01)
         np.testing.assert_array_equal(path[[0, -1]], route[[0, -1]])
+
+    def test_elevated_reference_filters_a_one_cell_bump_without_changing_ground(self):
+        x = np.arange(0, 8.025, .025)
+        ground = np.column_stack([x, np.full(len(x), .55), .05 + .1 * ((x >= 3) & (x < 3.1))])
+        original = ground.copy()
+        navigation, info = navigation_reference(ground, Options(), True)
+        np.testing.assert_array_equal(ground, original)
+        np.testing.assert_array_equal(navigation[:, :2], ground[:, :2])
+        self.assertLess(np.ptp(navigation[:, 2]), .01)
+        self.assertAlmostEqual(np.ptp(ground[:, 2]), .1)
+        self.assertTrue(info["validation"]["valid"])
+        self.assertLess(info["maxPitchChangeDeg"], .1)
+        np.testing.assert_allclose(navigation[[0, -1], 2], ground[[0, -1], 2] + .35, atol=1e-12)
+        self.assertGreaterEqual(info["minGroundOffsetM"], .2 - 1e-8)
+        self.assertLessEqual(info["maxGroundOffsetM"], .5 + 1e-8)
+
+    def test_reference_height_and_radius_do_not_change_ground_route(self):
+        dataset = self.datasets["zigzag"]
+        first = optimize(dataset.grid, dataset.route)
+        second = optimize(dataset.grid, dataset.route, Options(navigation_height=.7, elevation_radius=2))
+        np.testing.assert_array_equal(first["path"], second["path"])
+        self.assertEqual(first["validation"], second["validation"])
+        self.assertEqual(first["pathRole"], "ground-support")
+        self.assertEqual(first["scope"]["validationPath"], "path")
+        self.assertAlmostEqual(second["navigationPath"][0][2] - second["path"][0][2], .7)
+        self.assertEqual(second["navigation"]["smoothingRadiusM"], 2)
+        self.assertFalse(second["navigation"]["validation"]["ceilingClearanceVerified"])
+        self.assertFalse(second["navigation"]["validation"]["robotEnvelopeVerified"])
+
+    def test_elevated_reference_follows_slopes_and_respects_height_envelope_at_large_steps(self):
+        x = np.arange(0, 8.025, .025)
+        for z in (.05 + .1 * x, np.where(x < 4, .05, 1.05)):
+            ground = np.column_stack([x, np.zeros(len(x)), z])
+            navigation, info = navigation_reference(ground, Options(), True)
+            self.assertTrue(info["validation"]["heightEnvelopeValid"])
+            height = navigation[:, 2] - ground[:, 2]
+            self.assertGreaterEqual(height.min(), .2 - 1e-8)
+            self.assertLessEqual(height.max(), .5 + 1e-8)
+            np.testing.assert_allclose(navigation[[0, -1], 2], ground[[0, -1], 2] + .35)
+        slope = np.column_stack([x, np.zeros(len(x)), .05 + .1 * x])
+        navigation, _ = navigation_reference(slope, Options(), True)
+        middle = (x > 2) & (x < 6)
+        np.testing.assert_allclose(navigation[middle, 2], slope[middle, 2] + .35, atol=1e-10)
+
+    def test_reference_does_not_hide_ground_gaps_or_switch_floors(self):
+        grid = GridMap(np.array([[0, 0, 0], [2, 0, 0], [3, 0, 0]]))
+        result = optimize(grid, np.array([[.05, .05, .05], [.35, .05, .05]]))
+        self.assertFalse(result["validation"]["valid"])
+        self.assertFalse(result["navigation"]["validation"]["valid"])
+        self.assertFalse(result["navigation"]["validation"]["groundValid"])
+        self.assertTrue(result["navigation"]["validation"]["heightEnvelopeValid"])
+        keys = np.array([[x, y, z] for x in range(80) for y in range(10) for z in (0, 8)])
+        grid = GridMap(keys)
+        route = np.array([[1.05, .55, .05], [6.05, .55, .05]])
+        result = optimize(grid, route, Options(navigation_height=.8))
+        self.assertTrue(result["validation"]["valid"])
+        np.testing.assert_allclose(np.asarray(result["path"])[:, 2], .05)
+        np.testing.assert_allclose(np.asarray(result["navigationPath"])[:, 2], .85)
+        self.assertFalse(result["navigation"]["validation"]["ceilingClearanceVerified"])
 
     def test_shortcut_cannot_use_an_overhead_layer_as_ground(self):
         x, y = np.meshgrid(np.arange(160), np.arange(100))

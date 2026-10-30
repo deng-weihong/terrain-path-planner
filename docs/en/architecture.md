@@ -15,8 +15,9 @@ flowchart LR
     Core --> Search[XYZ graph search]
     Search --> Smooth[Whole-path optimization]
     Smooth --> Validate[Dense validation and metrics]
-    Validate --> Python
-    Validate --> API
+    Validate --> Elevated[Elevated navigation reference]
+    Elevated --> Python
+    Elevated --> API
 ```
 
 ## Modules
@@ -71,3 +72,7 @@ The core public interface uses standard C++ types. Algorithms depend on Eigen an
 Both implementations share map encoding, metric coordinates, parameter meanings, and result fields. C++ graph search matches the viewer's exact-endpoint raw-route entry point. It does not expose the old local corner-rounding postprocessor retained in the Python graph module. Native natural smoothing splines use a sparse linear system; floating-point differences from SciPy are expected.
 
 Verification covers native tests, installing and consuming the library, the CLI, cross-language regressions, and C++ planning and export through the same 3D viewer. See [C++ Usage and Design](cpp.md) for builds and numerical tolerances.
+
+## Elevated reference output
+
+`path` retains the ground support route and remains the object of `validation`. `navigationPath` shares XY and generates a separate smoothed elevated reference. The main viewer line uses the latter; exports retain both, while picks and search endpoints remain ground coordinates. Browser imports prefer `sourceRoute` to avoid using an elevated reference as ground.
